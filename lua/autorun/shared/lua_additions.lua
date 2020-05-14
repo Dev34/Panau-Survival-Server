@@ -59,3 +59,16 @@ function table.compare(tbl1, tbl2)
 
 	return true
 end
+
+-- splits a string given a seperator
+-- returns a sequential table of tokens, which could be empty
+function split(input_str, seperator)
+    if seperator == nil then
+        sep = "%s"
+    end
+    local t = {}
+    for str in string.gmatch(input_str, "([^" .. seperator .. "]+)") do
+        table.insert(t, str)
+    end
+    return t
+end
