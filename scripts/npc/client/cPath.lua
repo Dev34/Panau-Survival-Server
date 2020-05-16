@@ -1,23 +1,31 @@
 class "Path"
 
 function Path:__init()
-    
+    getter_setter(self, "name") -- adds Path:GetName and Path:SetName and defines instance.name
+    getter_setter(self, "positions") -- adds Path:GetPositions and Path:SetPositions and defines instance.positions
 end
 
-function Path:SetName(name)
-    self.name = name
-end
+function Path:RenderDebug(render_name)
+    local cam_pos = Camera:GetPosition()
+    local previous = self.positions[1]
 
-function Path:GetName(name)
-    return self.name
-end
+    if render_name then
+        -- Render the path name
+        if Vector3.Distance(cam_pos, previous) < 400 then
+            local pos = Render:WorldToScreen(previous)
+            Render:DrawText(pos, self.name, Color.Red)
+        end
+    end
 
-function Path:SetPositions(positions)
-    self.positions = positions
-end
+    for index, position in ipairs(self.positions) do
+        Render:DrawLine(previous, position, Color.Aqua)
 
-function Path:GetPositions()
-    return self.positions
+        if Vector3.Distance(cam_pos, position) < 50 then
+            Render:FillCircle(Render:WorldToScreen(position), 6, Color.Silver)
+        end
+
+        previous = position
+    end
 end
 
 function Path:InitializeFromJsonData(data)
@@ -40,7 +48,7 @@ function Path:GetJsonCompatibleData()
             table.insert(serialized_positions, Serializer:SerializeVector3(position, 2))
         end
     end
-    json_data['positions'] = serialized_positions
+    json_data.positions = serialized_positions
 
 
     return json_data
