@@ -4,7 +4,7 @@ function PathSerialization:__init()
     self.directory_name = "paths"
 end
 
-function PathSerialization:GetPathDataFromFile(name)
+function PathSerialization:GetPathDataFromFile(name, return_raw_contents)
     local filename = self.directory_name .. "/" .. name .. ".json"
 
     local file = io.open(filename, "r")
@@ -13,13 +13,30 @@ function PathSerialization:GetPathDataFromFile(name)
         local contents = file:read("*all")
         file:close()
 
-        local path_json_table = json.decode(contents)
-        return path_json_table
-        --output_table(base_json_table)
+        if return_raw_contents then
+            return contents
+        else
+            local path_json_table = json.decode(contents)
+            return path_json_table
+            --output_table(base_json_table)
+        end
 	else
         print("Path " .. name .. " does not exist!")
         return nil
 	end
+end
+
+function PathSerialization:GetFullyLoadedPathFromFile(name)
+    local path_data = self:GetPathDataFromFile(name)
+    if not path_data then
+        print("Path " .. name .. " does not exist!")
+        return nil
+    end
+
+    local path = Path()
+    path:InitializeFromJsonData(path_data)
+
+    return path
 end
 
 function PathSerialization:SavePath(path)
@@ -27,8 +44,6 @@ function PathSerialization:SavePath(path)
     local path_data = path:GetJsonCompatibleData()
 
     local encoded_data = json.encode(path_data)
-    --print("encoded data:")
-    --print(encoded_data)
 
     local file = io.open(filename, "w")
     if file then
@@ -38,10 +53,6 @@ function PathSerialization:SavePath(path)
     else
         print("Opening file failed when saving path")
     end
-end
-
-function PathSerialization:CommitAllBases()
-
 end
 
 PathSerialization = PathSerialization()
