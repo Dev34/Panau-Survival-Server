@@ -7,6 +7,7 @@ function PathBuilder:__init()
     self.path_positions = {}
 
     self.paths = {}
+    self.show_paths = true
 
     Events:Subscribe("LocalPlayerChat", self, self.LocalPlayerChat)
     Events:Subscribe("KeyUp", self, self.KeyUp)
@@ -24,11 +25,14 @@ function PathBuilder:LocalPlayerChat(args)
         self:SavePath(args)
         return false
     end
+    if args.text:find("/showpaths") then
+        self.show_paths = not self.show_paths
+    end
 end
 
 function PathBuilder:CreatePath(args)
     if self.creating_path == true then
-        Chat:Print("You are already creating a path")
+        Chat:Print("You are already creating a path", Color.Red)
         return
     end
 
@@ -61,12 +65,14 @@ function PathBuilder:KeyUp(args)
 end
 
 function PathBuilder:Render(args)
-    if not self.creating_patrol or count_table(self.path_positions) == 0 then
+    if self.creating_path and count_table(self.path_positions) > 0 then
         self:RenderNewPathPositions()
     end
 
-    for path_name, path in pairs(self.paths) do
-        self:RenderPath(path)
+    if self.show_paths then
+        for path_name, path in pairs(self.paths) do
+            self:RenderPath(path)
+        end
     end
 end
 
