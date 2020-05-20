@@ -35,12 +35,32 @@ end
 
 function NetworkAggregation:FreshBatch()
     self.send_timer:Restart()
+    self.send_check_thread = Thread(function()
+        local continue = true
+        while continue do
+            continue = self:CheckIfShouldSend()
+            if continue then
+                Timer.Sleep(10)
+            else
+                break
+            end
+        end
+    end)
+end
+
+function NetworkAggregation:CheckIfShouldSend()
+    if self.send_timer:GetMilliseconds() >= self.delay then
+        self:Send()
+        return false
+    else
+        return true
+    end
 end
 
 function NetworkAggregation:Send()
-    print("sending network aggregation")
+    print("sending network aggregation with requests:")
+    output_table(self.requests)
 
-
-
-    self.request = {}
+    self.send_check_thread = nil
+    self.requests = {}
 end
