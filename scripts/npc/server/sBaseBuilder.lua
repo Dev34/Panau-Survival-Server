@@ -175,10 +175,12 @@ function BaseBuilder:DeleteSpawnPointFromBase(args)
         return
     end
 
-    local base = BaseSerialization:GetFullyLoadedBaseFromFile(args)
+    local base = BaseSerialization:GetFullyLoadedBaseFromFile(base_name)
     base:RemoveSpawnPoint(spawn_point_name)
     
     BaseSerialization:SaveBase(base)
+
+    self:SyncDebugBase(base)
 end 
 
 if IsTest then

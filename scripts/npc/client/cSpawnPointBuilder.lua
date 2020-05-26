@@ -6,7 +6,7 @@ function SpawnPointBuilder:__init()
     self.building_spawn_point = SpawnPoint()
 
     Events:Subscribe("LocalPlayerChat", self, self.LocalPlayerChat)
-    --Events:Subscribe("Render", self, self.Render)
+    Events:Subscribe("Render", self, self.RenderDebug)
 
     --Network:Subscribe("npc/SyncPatrol", self, self.SyncPatrol)
 end
@@ -30,6 +30,10 @@ function SpawnPointBuilder:LocalPlayerChat(args)
     end
     if args.text:find("/outputsp") then -- /outputsp
         self:OutputSpawnPoint()
+        return false
+    end
+    if args.text:find("/setspawnpos") then -- /setspawnpos
+        self:SetSpawnPosition(args)
         return false
     end
 end
@@ -105,6 +109,17 @@ function SpawnPointBuilder:SaveSpawnPoint(args)
     self.building_spawn_point_path_name = nil
 end
 
+function SpawnPointBuilder:SetSpawnPosition(args)
+    if not self.creating_spawn_point then
+        Chat:Print("You are not currently creating a spawn point!", Color.Red)
+        return
+    end
+
+    self.building_spawn_point:SetSpawnPosition(LocalPlayer:GetPosition())
+    self.building_spawn_point:SetSpawnPositionYaw(LocalPlayer:GetAngle().yaw)
+    self:OutputSpawnPoint()
+end
+
 function SpawnPointBuilder:OutputSpawnPoint()
     if not self.creating_spawn_point then
         Chat:Print("You are not currently creating a spawn point!", Color.Red)
@@ -120,12 +135,32 @@ function SpawnPointBuilder:OutputSpawnPoint()
     if self.building_spawn_point:GetActorProfileEnum() then
         Chat:Print("Actor Profile: [ ", Color.White, tostring(ActorProfileEnum:GetDescription(self.building_spawn_point:GetActorProfileEnum())), Color.LawnGreen, " ]", Color.White)
     end
+    if self.building_spawn_point:GetSpawnPosition() then
+        Chat:Print("Spawn Position: [ ", Color.White, tostring(self.building_spawn_point:GetSpawnPosition()), Color.LawnGreen, " ]", Color.White)
+    end
 end
 
-function SpawnPointBuilder:Render(args)
+function SpawnPointBuilder:RenderDebug()
+    if self.creating_spawn_point then
+        if self.building_spawn_point:GetSpawnPosition() then
+            local spawn_pos = self.building_spawn_point:GetSpawnPosition()
+            -- Render the base name at base position
+            if Vector3.Distance(Camera:GetPosition(), spawn_pos) < 800 then
+                local transform = Transform3()
+                transform:Translate(spawn_pos)
+                transform:Rotate(Angle(0, math.pi / 2, 0))
+                Render:SetTransform(transform)
+                Render:FillCircle(Vector3.Zero, 1.75, Color.FireBrick)
+                Render:ResetTransform()
 
+                Render:DrawLine(spawn_pos, spawn_pos + (Angle(self.building_spawn_point:GetSpawnPositionYaw(), 0, 0) * (Vector3.Forward * 1.75)), Color.Black)
+
+                local pos = Render:WorldToScreen(spawn_pos)
+                Render:DrawText(pos, "Spawn Point: [ " .. self.building_spawn_point:GetName() .. " ]", Color.White)
+            end
+        end
+    end
 end
-
 
 if IsTest then
     SpawnPointBuilder = SpawnPointBuilder()
