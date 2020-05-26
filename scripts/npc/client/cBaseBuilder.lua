@@ -39,23 +39,44 @@ function BaseBuilder:RenderBaseDebug(base)
     end
 
     for spawn_point_name, spawn_point in pairs(base:GetSpawnPoints()) do
-        local spawn_point_path = spawn_point:GetPath()
-        if spawn_point_path then
-            spawn_point_path:RenderDebug(false) -- render the Path positions
-
-            -- render the spawn point name at first path position since there is a Path
-            local first_pos = spawn_point_path:GetPositions()[1]
-            if Vector3.Distance(Camera:GetPosition(), first_pos) < 600 then
-                Render:DrawText(Render:WorldToScreen(first_pos), "Spawn Point: [ " .. spawn_point:GetName() .. " ]", Color.LawnGreen)
-            end
-        end
-
-        -- render the spawn point name at defined sp position
-        --if self.position then
-        --Render:DrawText(Render:WorldToScreen(self.position), "Spawn Point: [ " .. spawn_point:GetName() .. " ]", Color.LawnGreen)
-        --end
-        
+        self:RenderSpawnPoint(spawn_point)    
     end
+end
+
+function BaseBuilder:RenderSpawnPoint(spawn_point)
+    if spawn_point:GetPath() then
+        local spawn_point_path = spawn_point:GetPath()
+        spawn_point_path:RenderDebug(false) -- render just the Path positions
+
+        -- render the spawn point name at first path position since there is a Path
+        local first_pos = spawn_point_path:GetPositions()[1]
+        if Vector3.Distance(Camera:GetPosition(), first_pos) < 600 then
+            Render:DrawText(Render:WorldToScreen(first_pos), "Spawn Point: [ " .. spawn_point:GetName() .. " ]", Color.LawnGreen)
+        end
+    end
+
+    if spawn_point:GetSpawnPosition() then
+        local spawn_pos = spawn_point:GetSpawnPosition()
+        -- Render the spawn point name at spawn point position
+        if Vector3.Distance(Camera:GetPosition(), spawn_pos) < 800 then
+            local transform = Transform3()
+            transform:Translate(spawn_pos)
+            transform:Rotate(Angle(0, math.pi / 2, 0))
+            Render:SetTransform(transform)
+            Render:FillCircle(Vector3.Zero, 1.75, Color.FireBrick)
+            Render:ResetTransform()
+
+            local yaw = spawn_point:GetSpawnPositionYaw() or 0
+            Render:DrawLine(spawn_pos, spawn_pos + (Angle(yaw, 0, 0) * (Vector3.Forward * 1.75)), Color.Black)
+
+            local pos = Render:WorldToScreen(spawn_pos + Vector3(0, 0.5, 0))
+            Render:DrawText(pos, "Spawn Point: [ " .. tostring(spawn_point:GetName()) .. " ]", Color.LawnGreen)
+        end
+    end
+    -- render the spawn point name at defined sp position
+    --if self.position then
+    --Render:DrawText(Render:WorldToScreen(self.position), "Spawn Point: [ " .. spawn_point:GetName() .. " ]", Color.LawnGreen)
+    --end
 end
 
 if IsTest then
