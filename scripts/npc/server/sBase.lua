@@ -5,6 +5,7 @@ function Base:__init()
     getter_setter(self, "radius") -- adds Base:GetRadius and Base:SetRadius and defines instance.radius
     getter_setter(self, "position") -- adds Base:GetPosition and Base:SetPosition and defines instance.position
     getter_setter(self, "spawn_points") -- adds Base:GetSpawnPoints and Base:SetSpawnPoints and defines instance.spawn_points
+    --self:SetRadius(1000)
     self:SetSpawnPoints({})
 end
 
@@ -64,4 +65,12 @@ function Base:GetJsonCompatibleData()
     end
 
     return json_data
+end
+
+function Base:SpawnActors()
+    for spawn_point_name, spawn_point in pairs(self.spawn_points) do
+        local actor_profile_instance = ActorManager:CreateActor(spawn_point:GetActorProfileEnum())
+        actor_profile_instance:InitializeFromSpawnPoint(spawn_point)
+        actor_profile_instance.actor:SetActive(true)
+    end
 end

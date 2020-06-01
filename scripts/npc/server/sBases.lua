@@ -9,6 +9,7 @@ function Bases:LoadBase(name)
     if base then
         self.bases[name] = base
     end
+    return base
 end
 
 function Bases:Create(name)
@@ -21,6 +22,10 @@ end
 
 function Bases:GetBaseByName(name)
     return self.bases[name]
+end
+
+function Bases:GetAllBases()
+    return self.bases
 end
 
 Bases = Bases()

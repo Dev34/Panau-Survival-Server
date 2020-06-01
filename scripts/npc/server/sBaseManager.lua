@@ -5,7 +5,12 @@ function BaseManager:__init()
 end
 
 function BaseManager:LoadBases()
-    --Bases:LoadBase("testbase")
+    self:LoadBase("testbase")
+end
+
+function BaseManager:LoadBase(base_name)
+    local base = Bases:LoadBase(base_name)
+    base:SpawnActors()
 end
 
 BaseManager = BaseManager()
