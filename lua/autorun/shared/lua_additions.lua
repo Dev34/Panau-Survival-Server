@@ -44,6 +44,7 @@ function output_table(t)
                     for k2, v2 in pairs(v) do
                         print("[", k2, "]: ", v2)
                     end
+                    print("}")
                 end
             end
             print("}")
