@@ -2,9 +2,13 @@ class "BaseBuilder"
 
 function BaseBuilder:__init()
     self.debug_bases = {}
+    self.debug_enabled = false
 
     Events:Subscribe("LocalPlayerChat", self, self.LocalPlayerChat)
-    Events:Subscribe("Render", self, self.Render)
+
+    if IsTest and self.debug_enabled then
+        Events:Subscribe("Render", self, self.Render)
+    end
 
     Network:Subscribe("npc/SyncDebugBase", self, self.SyncDebugBase)
 end

@@ -47,8 +47,6 @@ function ActorManager:CreateActor(actor_profile_enum)
 
     self.actors[actor_id] = actor_profile_instance
 
-    print("Created Actor")
-
     return actor_profile_instance
 end
 
