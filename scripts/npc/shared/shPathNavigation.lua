@@ -50,12 +50,6 @@ function PathNavigation:GetPosition()
     return exact_position
 end
 
---[[
-    [1]: 10,
-    [2]: 12,
-    [3]: 5
-]]
-
 function PathNavigation:ComputePath()
     self.has_computed_path = true
     self.path_distance_total = 0
