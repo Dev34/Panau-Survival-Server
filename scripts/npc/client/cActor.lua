@@ -7,6 +7,9 @@ function Actor:__init()
     getter_setter(self, "position")
     getter_setter(self, "cell")
     getter_setter(self, "host")
+    getter_setter(self, "model_id")
+    getter_setter(self, "behaviors")
+    self.behaviors = {}
 end
 
 function Actor:GetSyncData()
@@ -35,5 +38,17 @@ function Actor:InitializeFromSyncData(sync_data)
     end
     if sync_data.cell then
         self.cell = sync_data.cell
+    end
+end
+
+function Actor:UseBehavior(actor_profile_instance, behavior_class)
+    local behavior_instance = behavior_class(actor_profile_instance)
+    self.behaviors[behavior_class.name] = behavior_instance
+    behavior_instance:SetActive(true)
+end
+
+function Actor:DeactivateAllBehaviors()
+    for behavior_name, behavior_instance in pairs(self.behaviors) do
+        behavior_instance:SetActive(false)
     end
 end
