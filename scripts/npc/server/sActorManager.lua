@@ -26,6 +26,7 @@ function ActorManager:PlayerChatDebug(args)
 end
 
 function ActorManager:ModuleLoadDebug()
+    --[[
     self.actor1 = self:CreateActor(ActorProfileEnum.Patroller)
     self.actor2 = self:CreateActor(ActorProfileEnum.Patroller)
 
@@ -34,6 +35,7 @@ function ActorManager:ModuleLoadDebug()
 
     self.actor1:GetActor():SetPosition(Vector3(662, 298.99, -3997.2))
     self.actor1:GetActor():SetCell(GetCell(Vector3(662, 298.99, -4000.2), ActorSync.cell_size))
+    ]]
 end
 
 function ActorManager:CreateActor(actor_profile_enum)
