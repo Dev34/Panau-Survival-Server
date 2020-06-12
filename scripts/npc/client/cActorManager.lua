@@ -7,6 +7,7 @@ function ActorManager:__init()
     if IsTest then
         Events:Subscribe("Render", self, self.RenderDebug)
     end
+    Events:Subscribe("ModuleUnload", self, self.ModuleUnload)
     Network:Subscribe("npc/SyncActors", self, self.SyncActors)
 end
 
@@ -16,10 +17,14 @@ function ActorManager:SyncActors(actors_data)
         local actor_profile_instance = actor_profile_class()
         local actor = actor_profile_instance:GetActor()
 
+        self.actors[actor_id] = actor_profile_instance
+
         actor:InitializeFromSyncData(actor_data.actor_sync_data)
         actor_profile_instance:InitializeFromSyncData(actor_data.profile_sync_data)
 
-        self.actors[actor_id] = actor_profile_instance
+        if actor:GetActive() then
+            actor_profile_instance:Spawn()
+        end
     end
 
     for actor_id, actor_data in pairs(actors_data.stale_actors) do
@@ -47,6 +52,13 @@ function ActorManager:RenderDebug()
         Render:ResetTransform()
 
         actor_profile_instance:RenderDebug()
+    end
+end
+
+function ActorManager:ModuleUnload()
+    for actor_id, actor_profile_instance in pairs(self.actors) do
+        actor_profile_instance:GetActor():DeactivateAllBehaviors()
+        actor_profile_instance:Remove()
     end
 end
 
