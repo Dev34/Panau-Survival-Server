@@ -17,25 +17,32 @@ function ActorManager:SyncActors(actors_data)
         local actor_profile_instance = actor_profile_class()
         local actor = actor_profile_instance:GetActor()
 
-        self.actors[actor_id] = actor_profile_instance
+        if not self.actors[actor_id] then
+            self.actors[actor_id] = actor_profile_instance
 
-        actor:InitializeFromSyncData(actor_data.actor_sync_data)
-        actor_profile_instance:InitializeFromSyncData(actor_data.profile_sync_data)
+            actor:InitializeFromSyncData(actor_data.actor_sync_data)
+            actor_profile_instance:InitializeFromSyncData(actor_data.profile_sync_data)
 
-        if actor:GetActive() then
-            actor_profile_instance:Spawn()
+            if actor:GetActive() then
+                actor_profile_instance:Spawn()
+            end
+            print("Synced actor " .. tostring(actor_id))
+        else
+            -- TODO: consider validating this on the back-end, or just keep this check here
+            print("Tried to sync actor that was already synced")
         end
     end
 
     for actor_id, actor_data in pairs(actors_data.stale_actors) do
         local actor_profile_instance = self.actors[actor_id]
+        actor_profile_instance:GetActor():RemoveAllBehaviors()
         assert(actor_profile_instance ~= nil)
         actor_profile_instance:Remove()
+        
+        print("Removed actor " .. tostring(actor_id))
 
         self.actors[actor_id] = nil
     end
-
-    output_table(self.actors)
 end
 
 function ActorManager:RenderDebug()
@@ -57,7 +64,7 @@ end
 
 function ActorManager:ModuleUnload()
     for actor_id, actor_profile_instance in pairs(self.actors) do
-        actor_profile_instance:GetActor():DeactivateAllBehaviors()
+        actor_profile_instance:GetActor():RemoveAllBehaviors()
         actor_profile_instance:Remove()
     end
 end

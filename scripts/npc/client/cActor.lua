@@ -47,8 +47,11 @@ function Actor:UseBehavior(actor_profile_instance, behavior_class)
     behavior_instance:SetActive(true)
 end
 
-function Actor:DeactivateAllBehaviors()
+function Actor:RemoveAllBehaviors()
     for behavior_name, behavior_instance in pairs(self.behaviors) do
         behavior_instance:SetActive(false)
+        if behavior_instance.Remove then
+            behavior_instance:Remove()
+        end
     end
 end
