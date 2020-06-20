@@ -4,14 +4,53 @@ function PathNavigation:__init()
     getter_setter(self, "active")
     getter_setter(self, "path")
     getter_setter(self, "speed_multiplier")
+    getter_setter(self, "initial_progress")
+    getter_setter(self, "path_finished_callback")
+    getter_setter(self, "path_finished_callback_instance")
+    getter_setter(self, "node_reached_callback")
+    getter_setter(self, "node_reached_callback_instance")
     self.active = false
-
+    self.initial_progress = 0
     self.has_computed_path = false
+    self.last_current_node_index = 0
+
+    print("Created PathNavigation instance")
 end
 
 function PathNavigation:StartPath()
     self.active = true
     self.life_timer = Timer()
+
+    if not self.has_computed_path then
+        self:ComputePath()
+    end
+
+    self.check_finished_interval = Timer.SetInterval(250, function()
+        if self and self.path_finished_callback then
+            if self:GetPathProgress() >= 1.00 then
+                self.path_finished_callback(self.path_finished_callback_instance)
+                Timer.Clear(self.check_finished_interval)
+                self.check_finished_interval = nil
+            end
+        else
+            Timer.Clear(self.check_finished_interval)
+            self.check_finished_interval = nil
+        end
+    end)
+
+    self.node_reached_interval = Timer.SetInterval(200, function()
+        if self and self.active and self.node_reached_callback then
+            -- TODO: find a less expensive way to compute current_node_index using computed data?
+            local current_node_index = self:GetCurrentNodeIndex()
+            if current_node_index > self.last_current_node_index then
+                self.last_current_node_index = current_node_index
+                self.node_reached_callback(self.node_reached_callback_instance, current_node_index)
+            end
+        else
+            Timer.Clear(self.node_reached_interval)
+            self.node_reached_interval = nil
+        end
+    end)
 end
 
 function PathNavigation:GetPosition()
@@ -19,9 +58,12 @@ function PathNavigation:GetPosition()
         self:ComputePath()
     end
 
-    local progress_percentage = self.life_timer:GetMilliseconds() / self.lifetime_ms
-    local distance_travelled = self.path_distance_total * progress_percentage
     local path_positions = self.path:GetPositions()
+    local progress_percentage = self:GetPathProgress()
+    if progress_percentage >= 1.00 then
+        return path_positions[#path_positions]
+    end
+    local distance_travelled = self.path_distance_total * progress_percentage
     local progress_percentage_to_next_node
     local current_node_index, next_node_index
     for node_index, position in ipairs(path_positions) do
@@ -38,7 +80,7 @@ function PathNavigation:GetPosition()
     end
 
     if not next_node_index then
-        return path_positions[current_node_index]
+        return path_positions[#path_positions]
     end
 
     local exact_position = math.lerp(
@@ -48,6 +90,41 @@ function PathNavigation:GetPosition()
     )
 
     return exact_position
+end
+
+-- returns 0.0 -> 1.0 path progress
+function PathNavigation:GetPathProgress()
+    if not self.has_computed_path then
+        self:ComputePath()
+    end
+    
+    local initial_progress_ms = self.lifetime_ms * self.initial_progress
+    local life_time_ms = (self.life_timer:GetMilliseconds() + initial_progress_ms) or 1.0
+    return life_time_ms / self.lifetime_ms
+end
+
+function PathNavigation:GetCurrentNodeIndex()
+    if not self.has_computed_path then
+        self:ComputePath()
+    end
+
+    local progress_percentage = self:GetPathProgress()
+    local distance_travelled = self.path_distance_total * progress_percentage
+    local path_positions = self.path:GetPositions()
+    local progress_percentage_to_next_node
+    local current_node_index, next_node_index
+    local node_distance
+    for node_index, position in ipairs(path_positions) do
+        node_distance = self.path_distance_map[node_index]
+        if node_distance then
+            distance_travelled = distance_travelled - node_distance
+            if distance_travelled < 0 then
+                return node_index
+            end
+        end
+    end
+
+    return #path_positions
 end
 
 function PathNavigation:ComputePath()
