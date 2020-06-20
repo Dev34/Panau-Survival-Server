@@ -88,3 +88,12 @@ function split(input_str, seperator)
     end
     return t
 end
+
+-- returns a reversed table where the values are Copy'ed
+function reversed_copy(t)
+    local reversed_copied_table = {}
+    for i = #t, 1, -1 do
+        table.insert(reversed_copied_table, Copy(t[i]))
+    end
+    return reversed_copied_table
+end
