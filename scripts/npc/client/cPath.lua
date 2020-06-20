@@ -22,6 +22,7 @@ function Path:RenderDebug(render_name)
 
         if Vector3.Distance(cam_pos, position) < 50 then
             Render:FillCircle(Render:WorldToScreen(position), 6, Color.Silver)
+            Render:DrawText(Render:WorldToScreen(position), tostring(index), Color.White)
         end
 
         previous = position
