@@ -64,6 +64,7 @@ function ActorSync:PlayerCellUpdate(args)
     local actors_to_sync = ActorSync:GetActiveActorsInCells(args.updated)
     actor_data.new_actors = {}
     for actor_id, actor_profile in pairs(actors_to_sync) do
+        actor_profile:GetActor():StreamInPlayer(args.player)
         actor_data.new_actors[actor_id] = {
             actor_sync_data = actor_profile:GetActor():GetSyncData(),
             profile_sync_data = actor_profile:GetSyncData()
@@ -75,6 +76,7 @@ function ActorSync:PlayerCellUpdate(args)
     local stale_actors_to_sync = ActorSync:GetActiveActorsInCells(args.old_adjacent)
     actor_data.stale_actors = {}
     for actor_id, actor_profile in pairs(stale_actors_to_sync) do
+        actor_profile:GetActor():StreamOutPlayer(args.player)
         actor_data.stale_actors[actor_id] = {
             actor_sync_data = actor_profile:GetActor():GetSyncData(),
             profile_sync_data = actor_profile:GetSyncData()

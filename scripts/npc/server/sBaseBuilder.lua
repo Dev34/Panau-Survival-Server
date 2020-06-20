@@ -141,9 +141,6 @@ function BaseBuilder:AddSpawnPoint(args)
         spawn_point:SetPath(path)
     end
 
-    print("spawn point data:")
-    output_table(args.spawn_point_data)
-
     local base_data = BaseSerialization:GetBaseDataFromFile(spawn_point:GetBaseName())
     local base = Base()
 
