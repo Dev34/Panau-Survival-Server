@@ -21,7 +21,7 @@ function BaseBuilder:SyncDebugBase(args)
     base:SetName(args.name)
     base:InitializeFromJsonData(args.serialized_data)
 
-    output_table(args)
+    --output_table(args)
     self.debug_bases[args.name] = base
 end
 
