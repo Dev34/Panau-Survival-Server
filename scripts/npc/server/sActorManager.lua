@@ -46,6 +46,7 @@ function ActorManager:CreateActor(actor_profile_enum)
     local actor = actor_profile_instance:GetActor()
 
     actor:SetActorId(actor_id)
+    actor:SetActorProfileInstance(actor_profile_instance)
 
     self.actors[actor_id] = actor_profile_instance
 
