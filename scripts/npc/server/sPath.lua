@@ -38,3 +38,11 @@ function Path:GetJsonCompatibleData()
     return json_data
 end
 
+function Path:GetReversedCopy()
+    local new_path = Path()
+    local reversed_path_positions = reversed_copy(self.positions)
+    new_path:SetName(self.name)
+    new_path:SetPositions(reversed_path_positions)
+    return new_path
+end
+
