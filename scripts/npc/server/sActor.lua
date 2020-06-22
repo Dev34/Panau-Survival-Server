@@ -10,6 +10,8 @@ function Actor:__init()
     getter_setter(self, "streamed_players")
     getter_setter(self, "behaviors")
     getter_setter(self, "actor_profile_instance")
+    getter_setter(self, "removed")
+    
     self.behaviors = {}
     self.streamed_players = {}
 end
@@ -26,6 +28,11 @@ function Actor:StreamOutPlayer(player)
 
     local steam_id = tostring(player:GetSteamId())
     self.streamed_players[steam_id] = nil
+end
+
+function Actor:IsPlayerStreamedIn(player)
+    if not IsValid(player) then return false end
+    return self.streamed_players[tostring(player:GetSteamId())] ~= nil
 end
 
 function Actor:GetStreamedPlayersSequential()
@@ -55,8 +62,11 @@ function Actor:UseBehavior(actor_profile_instance, behavior_class)
     behavior_instance:SetActive(true)
 end
 
-function Actor:DeactivateAllBehaviors()
+function Actor:RemoveAllBehaviors()
     for behavior_name, behavior_instance in pairs(self.behaviors) do
+        if behavior_instance.Remove then
+            behavior_instance:Remove()
+        end
         behavior_instance:SetActive(false)
     end
 end
