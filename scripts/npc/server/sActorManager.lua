@@ -23,6 +23,14 @@ function ActorManager:PlayerChatDebug(args)
         
         local actor = ActorManager:CreateActor(actor_profile_enum, args.player:GetPosition())
     end
+
+    if args.text:find("/citylooter") then
+        local actor_profile_instance = ActorManager:CreateActor(ActorProfileEnum.CityLooter)
+        actor_profile_instance:Initialize({
+            position = args.player:GetPosition()
+        })
+        actor_profile_instance.actor:SetActive(true)
+    end
 end
 
 function ActorManager:ModuleLoadDebug()
@@ -51,6 +59,10 @@ function ActorManager:CreateActor(actor_profile_enum)
     self.actors[actor_id] = actor_profile_instance
 
     return actor_profile_instance
+end
+
+function ActorManager:RemoveActor(actor_profile_instance)
+    -- need to set actor.removed here
 end
 
 ActorManager = ActorManager()
