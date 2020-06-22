@@ -12,67 +12,65 @@ Events:Subscribe("Inventory/ToggleEquipped", function(args)
 
     if args.item.equipped then
         args.player:SetValue("ParachutingValue", 0)
-        table.insert(players_with_parachutes, args.player)
+        players_with_parachutes[args.player:GetId()] = args.player
     else
-        for k,v in pairs(players_with_parachutes) do
-            if v:GetId() == args.player:GetId() then
-                table.remove(players_with_parachutes, k)
-                break
-            end
-        end
+        players_with_parachutes[args.player:GetId()] = nil
     end
 
 end)
 
+Events:Subscribe("SecondTick", function()
+    for player in Server:GetPlayers() do
+        if IsValid(player) and players_with_parachutes[player:GetId()] then
+            if player:GetValue("ParachutingValue") and player:GetParachuting() then
+                player:SetValue("ParachutingValue", player:GetValue("ParachutingValue") + ItemsConfig.equippables["Parachute"].dura_per_sec)
+            end
+        elseif IsValid(player) then
+            players_with_parachutes[player:GetId()] = nil
+        end
+    end
+end)
 
-local func = coroutine.wrap(function()
+local parachute_perks =
+{
+    [43] = 1 - (0.10 / 2), -- 10%
+    [89] = 1 - (0.25 / 2), -- 25%
+    [130] = 1 - (0.50 / 2), -- 50%
+    [156] = 1 - (0.75 / 2), -- 75%
+    [175] = 1 - (1.00 / 2) -- 100% extra
+}
 
-    while true do
+Timer.SetInterval(5000, function()
 
-        for k,v in pairs(players_with_parachutes) do
-            if IsValid(v) then
-                if v:GetParachuting() then
-                    v:SetValue("ParachutingValue", v:GetValue("ParachutingValue") + ItemsConfig.equippables["Parachute"].dura_per_sec)
+    for player in Server:GetPlayers() do
+
+        if IsValid(player) then
+            local parachuting_value = player:GetValue("ParachutingValue")
+
+            if parachuting_value and parachuting_value > 0 then
+                local item = GetEquippedItem("Parachute", player)
+                if not item then return end
+
+                local perks = player:GetValue("Perks")
+                local perk_mod = 1
+
+                for perk_id, dura_mod in pairs(parachute_perks) do
+                    if perks.unlocked_perks[perk_id] then
+                        perk_mod = math.min(perk_mod, dura_mod)
+                    end
                 end
-            else
-                players_with_parachutes[k] = nil
+
+                item.durability = item.durability - math.max(1, math.floor(parachuting_value * perk_mod))
+                Inventory.ModifyDurability({
+                    player = player,
+                    item = item
+                })
+                UpdateEquippedItem(player, "Parachute", item)
+                player:SetValue("ParachutingValue", 0)
+
             end
         end
 
-        Timer.Sleep(1000)
-
-    end
-end)()
-
-
-local func2 = coroutine.wrap(function()
-
-    while true do
-
-        for player in Server:GetPlayers() do
-
-            if IsValid(player) then
-                local parachuting_value = player:GetValue("ParachutingValue")
-
-                if parachuting_value and parachuting_value > 0 then
-                    local item = GetEquippedItem("Parachute", player)
-                    if not item then return end
-                    item.durability = item.durability - parachuting_value
-                    Inventory.ModifyDurability({
-                        player = player,
-                        item = item
-                    })
-                    UpdateEquippedItem(player, "Parachute", item)
-                    player:SetValue("ParachutingValue", 0)
-
-                end
-            end
-
-            Timer.Sleep(5)
-        end
-
-        Timer.Sleep(3000)
-
     end
 
-end)()
+end)

@@ -9,9 +9,9 @@ function sWhisper:PlayerChat(args)
 
     local words = args.text:split(" ")
 
-    if words[1] == "/w" and words[2] and words[3] then
+    if string.lower(words[1]) == "/w" and words[2] and words[3] then
         self:WhisperPlayer(args)
-    elseif words[1] == "/r" and words[2] then
+    elseif string.lower(words[1]) == "/r" and words[2] then
         self:ReplyPlayer(args)
     end
 
@@ -46,8 +46,8 @@ function sWhisper:WhisperPlayer(args)
     local message_start_index = string.find(args.text:sub(index1, args.text:len()), " ")
     local message = args.text:sub(message_start_index + index1, args.text:len())
 
-    Chat:Send(target, string.format("%s whispers: %s", args.player:GetName(), message), self.color)
-    Chat:Send(args.player, string.format("You whisper to %s: %s", target:GetName(), message), self.color)
+    Chat:Send(target, string.format("%s whispers: %s", args.player:GetName(), message), args.player:GetColor())
+    Chat:Send(args.player, string.format("You whisper to %s: %s", target:GetName(), message), target:GetColor())
 
     target:SetValue("LastMessagedPlayer", args.player)
     args.player:SetValue("LastMessagedPlayer", target)
@@ -76,8 +76,8 @@ function sWhisper:ReplyPlayer(args)
 
     local message = args.text:sub(4, args.text:len())
 
-    Chat:Send(target, string.format("%s whispers: %s", args.player:GetName(), message), self.color)
-    Chat:Send(args.player, string.format("You whisper to %s: %s", target:GetName(), message), self.color)
+    Chat:Send(target, string.format("%s whispers: %s", args.player:GetName(), message), args.player:GetColor())
+    Chat:Send(args.player, string.format("You whisper to %s: %s", target:GetName(), message), target:GetColor())
 
     target:SetValue("LastMessagedPlayer", args.player)
     args.player:SetValue("LastMessagedPlayer", target)

@@ -5,23 +5,49 @@ function cExplosivesDetector:__init()
     self.nearby_explosives = {}
 
     self.active = false
-    self.range = 60
+    self.base_range = 50
+    self.range = self.base_range
 
     self.circle_size = 12
     self.alpha = 255
     self.circle_color = Color(255, 0, 0, self.alpha)
     self.circle_color_owned = Color(0, 200, 0, self.alpha)
     self.border_color = Color(0, 0, 0, self.alpha)
+
+    self.perks = 
+    {
+        [57] = {[2] = 1.25},
+        [116] = {[2] = 1.5}
+    }
     
-    local func = coroutine.wrap(function()
+    Thread(function()
         while true do
             self:CheckForNearbyExplosives()
+            self:UpdateRangeBasedOnPerks()
             Timer.Sleep(1000)
         end
-
-    end)()
+    end)
     
     Network:Subscribe(var("items/ToggleEquippedExplosivesDetector"):get(), self, self.ToggleEquipped)
+
+end
+
+function cExplosivesDetector:UpdateRangeBasedOnPerks()
+
+    local perks = LocalPlayer:GetValue("Perks")
+
+    if not perks then return end
+
+    local perk_mod = 1
+
+    for perk_id, perk_mod_data in pairs(self.perks) do
+        local choice = perks.unlocked_perks[perk_id]
+        if choice and perk_mod_data[choice] then
+            perk_mod = math.max(perk_mod, perk_mod_data[choice])
+        end
+    end
+
+    self.range = self.base_range * perk_mod
 
 end
 
@@ -35,10 +61,11 @@ function cExplosivesDetector:CheckForNearbyExplosives()
     for id, obj in pairs(cClaymores.CSO_register) do
         local dist = obj.position:Distance(local_pos)
         if dist < self.range and IsValid(obj.object) then
+            local is_friendly = obj.owner_id == tostring(LocalPlayer:GetSteamId()) or AreFriends(LocalPlayer, obj.owner_id)
             nearby_explosives[id] = {
                 pos = obj.position, 
-                name = "Claymore", 
-                is_mine = obj.owner_id == tostring(LocalPlayer:GetSteamId()) or IsAFriend(LocalPlayer, obj.owner_id),
+                name = string.format("Claymore%s", is_friendly and " (Friendly)" or " (Enemy)"), 
+                is_mine = is_friendly,
                 show_name = dist < self.range * 0.75}
         end
         Timer.Sleep(1)
@@ -47,10 +74,11 @@ function cExplosivesDetector:CheckForNearbyExplosives()
     for id, obj in pairs(cMines.CSO_register) do
         local dist = obj.position:Distance(local_pos)
         if dist < self.range and IsValid(obj.object) then
+            local is_friendly = obj.owner_id == tostring(LocalPlayer:GetSteamId()) or AreFriends(LocalPlayer, obj.owner_id)
             nearby_explosives[id] = {
                 pos = obj.position, 
-                name = "Mine", 
-                is_mine = obj.owner_id == tostring(LocalPlayer:GetSteamId()) or IsAFriend(LocalPlayer, obj.owner_id),
+                name = string.format("Mine%s", is_friendly and " (Friendly)" or " (Enemy)"), 
+                is_mine = is_friendly,
                 show_name = dist < self.range * 0.75}
         end
         Timer.Sleep(1)

@@ -1,13 +1,29 @@
-Events:Subscribe("ClientModuleLoad", function(args)
+class 'sItemUse'
+
+function sItemUse:__init()
+
+    Events:Subscribe("ClientModuleLoad", self, self.ClientModuleLoad)
+    Events:Subscribe("Inventory/UseItem", self, self.InventoryUseItem)
+
+    Network:Subscribe("items/CancelUsage", self, self.CancelUsage)
+    Network:Subscribe("items/CompleteItemUsage", self, self.CompleteItemUsage)
+end
+
+function sItemUse:ClientModuleLoad(args)
 
     -- Set array of equipped items on player for easy lookup by name
     args.player:SetValue("ItemUse", {})
 
-end)
+end
 
-Events:Subscribe("Inventory/UseItem", function(args)
+function sItemUse:InventoryUseItem(args)
 
     if not args.item or not IsValid(args.player) then return end
+
+    Events:Fire("Discord", {
+        channel = "Item Usage",
+        content = string.format("%s [%s] used %s", args.player:GetName(), tostring(args.player:GetSteamId()), args.item.name)
+    })
 
     local player_iu = args.player:GetValue("ItemUse")
 
@@ -18,30 +34,28 @@ Events:Subscribe("Inventory/UseItem", function(args)
             return
         end
 
-        --[[if ItemsConfig.usables[args.item.name].vehicle and not args.player:InVehicle() then
-        
-            return
-        end]]
-
-        --[[if ItemsConfig.usables[args.item.name].storage and 
-            (not args.player.current_box or not args.player.current_box.is_storage or not args.player.current_box.storage) then
-        
-            return
-        end
-
-        -- Check if they can hack the storage or apply upgrades, etc
-        if ItemsConfig.usables[args.item.name].storage then
-            if not args.player.current_box.storage.can_use_item(args.item.name, args.player) then
-                return
-            end
-        end]]
-
-
         local use_time = ItemsConfig.usables[args.item.name].use_time
 
         if not use_time then return end
+        if ItemsConfig.usables[args.item.name].delay_use and not args.delayed then return end
 
         Inventory.OperationBlock({player = args.player, change = 1}) -- Block inventory operations
+
+        local perks = args.player:GetValue("Perks")
+        local perk_use_time_mod = 1
+        local item_perks = ItemsConfig.use_time_perks[args.item.name]
+
+        if perks and item_perks then
+
+            for perk_id, use_time_modifier in pairs(item_perks) do
+                if perks.unlocked_perks[perk_id] then
+                    perk_use_time_mod = math.min(perk_use_time_mod, use_time_modifier)
+                end
+            end
+
+        end
+
+        use_time = use_time * perk_use_time_mod
         
         player_iu.using = true
         player_iu.health = args.player:GetHealth()
@@ -64,61 +78,49 @@ Events:Subscribe("Inventory/UseItem", function(args)
                 player_iu2.using = false
             end
             args.player:SetValue("ItemUse", player_iu2)
+
+            Events:Fire("Discord", {
+                channel = "Item Usage",
+                content = string.format("%s [%s] finished using %s", args.player:GetName(), tostring(args.player:GetSteamId()), args.item.name)
+            })
+
         end)
 
         args.player:SetValue("ItemUse", player_iu)
     end
 
-end)
+end
 
 -- When a player tries to use an item but cancels for some reason
-Network:Subscribe("items/CancelUsage", function(args, player)
+function sItemUse:CancelUsage(args, player)
+
+    Events:Fire("ItemUse/CancelUsage", {player = player})
 
     local player_iu = player:GetValue("ItemUse")
 
     if player_iu.using and player_iu.item then
-    
-        --[[if (reason == 1)
-        {
-            jcmp.notify(player, {
-                title: 'Cannot use item!',
-                subtitle: `You must be standing still to use ${player.iu.item.name}!`,
-                preset: 'warn'
-            })
-        }
-        else if (reason == 2)
-        {
-            jcmp.notify(player, {
-                title: 'Item usage cancelled!',
-                subtitle: `You took damage, so usage of ${player.iu.item.name} was cancelled.`,
-                preset: 'warn'
-            })
-
-        }
-        else if (reason == 3)
-        {
-            jcmp.notify(player, {
-                title: 'Item usage cancelled!',
-                subtitle: `Usage of ${player.iu.item.name} was cancelled.`,
-                preset: 'warn'
-            })
-        }--]]
-
         Inventory.OperationBlock({player = player, change = -1})
     end
 
     player:SetValue("ItemUse", {})
     Timer.Clear(player_iu.timeout)
-end)
 
-Network:Subscribe("items/CompleteItemUsage", function(args, player)
+end
+
+function sItemUse:CompleteItemUsage(args, player)
 
     Timer.SetTimeout(100, function() 
-        player:SetValue("ItemUse", {})
+        if IsValid(player) then
+            player:SetValue("ItemUse", {})
+        end
     end)
 
     Timer.SetTimeout(1000, function() 
-        Inventory.OperationBlock({player = player, change = -1})
+        if IsValid(player) then
+            Inventory.OperationBlock({player = player, change = -1})
+        end
     end);
         
-end)
+end
+
+sItemUse = sItemUse()

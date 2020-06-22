@@ -4,19 +4,11 @@ local StashNameToType =
 {
     ["Barrel Stash"] = Lootbox.Types.BarrelStash,
     ["Garbage Stash"] = Lootbox.Types.GarbageStash,
-    ["Locked Stash"] = Lootbox.Types.LockedStash,
+    ["Locked Stash"] = Lootbox.Types.LockedStash
 }
 
 function sStashPlacement:__init()
-
     
-    local func = coroutine.wrap(function()
-        while not SharedObject.GetByName("SafezoneConfig") do
-            Timer.Sleep(500)
-        end
-        self.sz_config = SharedObject.GetByName("SafezoneConfig"):GetValues()
-    end)()
-
     Events:Subscribe("Inventory/UseItem", self, self.UseItem)
 
     Network:Subscribe("items/CancelStashPlacement", self, self.CancelStashPlacement)
@@ -74,11 +66,19 @@ function sStashPlacement:PlaceStash(args, player)
         return
     end
 
-    -- If they are within sz radius * 2, we don't let them place that close
-    if player:GetPosition():Distance(self.sz_config.safezone.position) < self.sz_config.safezone.radius * 2 then
-        Chat:Send(player, "Cannot place stashes while near the safezone!", Color.Red)
+    if args.model and DisabledPlacementModels[args.model] then
+        Chat:Send(player, "Placing stash failed!", Color.Red)
         return
     end
+
+    self.sz_config = SharedObject.GetByName("SafezoneConfig"):GetValues()
+
+    -- If they are within nz, we don't let them place that close
+    if player:GetPosition():Distance(self.sz_config.neutralzone.position) < self.sz_config.neutralzone.radius then
+        Chat:Send(player, "Cannot place stashes while near the neutral zone!", Color.Red)
+        return
+    end
+
 
     local pitch = math.abs(args.angle.pitch)
     local roll = math.abs(args.angle.roll)
@@ -95,7 +95,25 @@ function sStashPlacement:PlaceStash(args, player)
     end
 
 
-    self:TryPlaceStash(args, player)
+    local sub = nil
+    sub = Events:Subscribe("IsTooCloseToLootCheck"..tostring(player:GetSteamId()), function(args)
+    
+        Events:Unsubscribe(sub)
+        sub = nil
+
+        if args.too_close then
+
+            Chat:Send(player, "Cannot place stashes too close to loot!", Color.Red)
+            return
+
+        end
+
+        self:TryPlaceStash(args, args.player)
+
+    end)
+
+    args.player = player
+    Events:Fire("CheckIsTooCloseToLoot", args)
 
 end
 
@@ -124,3 +142,9 @@ end
 
 
 sStashPlacement = sStashPlacement()
+
+
+DisabledPlacementModels = 
+{
+    ["geo.cbb.eez/go152-a.lod"] = true
+}

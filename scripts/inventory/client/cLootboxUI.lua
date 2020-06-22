@@ -34,15 +34,99 @@ function cLootboxUI:__init()
     self.stash_dismount_button:Hide()
     self.stash_dismount_button:Subscribe("Press", self, self.PressDismountStashButton)
 
+    self:CreateAccessModeMenu()
+
     self.lootbox_title = ClientInventory.ui:CreateCategoryTitle("loot", false, self.lootbox_title_window)
     self.lootbox_title_shadow = ClientInventory.ui:CreateCategoryTitle("loot", true, self.lootbox_title_window)
     
     LocalPlayer:SetValue("LootOpen", false)
 
     Events:Subscribe(var("KeyUp"):get(), self, self.KeyUp)
+    self.window:Subscribe(var("PostRender"):get(), self, self.WindowRender)
     Network:Subscribe(var("Inventory/LootboxOpen"):get(), self, self.LootboxOpen)
     Network:Subscribe(var("Inventory/LootboxSync"):get(), self, self.LootboxSync)
     
+end
+
+function cLootboxUI:CreateAccessModeMenu()
+
+    self.access_mode_menu = Rectangle.Create(self.lootbox_title_window)
+    self.access_mode_menu:SetColor(Color(0, 0, 0, 150))
+    self.access_mode_menu:SetSize(Vector2(self.stash_dismount_button:GetWidth() * 0.5, self.stash_dismount_button:GetHeight() * 3))
+    self.access_mode_menu:Subscribe("PostRender", self, self.AccessModeRender)
+
+    local button_names = 
+    {
+        "Everyone",
+        "Friends",
+        "Only Me"
+    }
+
+    for i = 1, 3 do
+        local button = Button.Create(self.access_mode_menu)
+        button:SetText(button_names[i])
+        button:SetSizeRel(Vector2(1, 1/3))
+        button:SetTextSize(button:GetHeight() / 2)
+        button:SetDock(GwenPosition.Top)
+        button:SetTextPadding(Vector2(button:GetWidth() * 0.25, 0), Vector2.Zero)
+        button:SetBackgroundVisible(false)
+        button:SetDataNumber("access_mode", i)
+        button:Subscribe("Press", self, self.PressStashAccessModeButton)
+    end
+
+end
+
+function cLootboxUI:PressStashAccessModeButton(btn)
+
+    if not LootManager.current_box then return end
+
+    local new_access_mode = btn:GetDataNumber("access_mode")
+
+    if new_access_mode == LootManager.current_box.stash.access_mode then return end
+
+    Network:Send("Stashes/UpdateStashAccessMode", {
+        mode = btn:GetDataNumber("access_mode")
+    })
+
+end
+
+function cLootboxUI:AccessModeRender(args)
+
+    local pos = self.lootbox_title_window:GetPosition() + self.access_mode_menu:GetPosition()
+
+    local t = Transform2():Translate(pos)
+    Render:SetTransform(t)
+
+    local size = self.access_mode_menu:GetSize()
+
+    Render:DrawLine(Vector2.Zero, Vector2(0, size.y), Color.White)
+    Render:DrawLine(Vector2.Zero, Vector2(size.x, 0), Color.White)
+    Render:DrawLine(size, size + Vector2(-size.x, 0), Color.White)
+    Render:DrawLine(size, size + Vector2(0, -size.y), Color.White)
+    
+    Render:DrawLine(Vector2(0, size.y * 1 / 3), Vector2(0, size.y * 1 / 3) + Vector2(size.x, 0), Color.White)
+    Render:DrawLine(Vector2(0, size.y * 2 / 3), Vector2(0, size.y * 2 / 3) + Vector2(size.x, 0), Color.White)
+
+    local access_mode = LootManager.current_box.stash.access_mode
+    local circle_size =  size.y / 3 * 0.2
+    Render:FillCircle(
+        Vector2(size.y / 6, size.y / 6 + size.y * (access_mode - 1) / 3) - Vector2(circle_size, circle_size) / 2, 
+        circle_size, 
+        Color.Red)
+
+    Render:ResetTransform()
+
+end
+
+function cLootboxUI:WindowRender()
+
+    for index, stack in pairs(LootManager.current_box.contents) do
+
+        local itemWindow = self.itemWindows[index]
+        InventoryUIStyle:RenderItemWindow(itemWindow, stack, self.window)
+
+    end
+
 end
 
 function cLootboxUI:PressDismountStashButton(btn)
@@ -50,6 +134,13 @@ function cLootboxUI:PressDismountStashButton(btn)
     local current_box = LootManager.current_box
 
     if not current_box.stash then return end
+
+    if current_box.tier == Lootbox.Types.Workbench then
+        Network:Send("Workbenches/StartCombine", {
+            id = current_box.stash.id
+        })
+        return
+    end
 
     local is_owner = current_box.stash.owner_id == tostring(LocalPlayer:GetSteamId())
 
@@ -71,8 +162,22 @@ function cLootboxUI:GetLootboxTitlePosition(box)
 
 end
 
+function cLootboxUI:SetLootboxTitle(name, num_items, capacity)
+
+    local text = string.format("%s (%s/%d)", name, tostring(num_items), tostring(capacity))
+
+    self.lootbox_title:SetText(text)
+    self.lootbox_title:SetTextSize(ClientInventory.ui.inv_dimensions.text_size)
+    self.lootbox_title:SetPosition(self:GetLootboxTitlePosition(current_box))
+
+    self.lootbox_title_shadow:SetText(text)
+    self.lootbox_title_shadow:SetTextSize(ClientInventory.ui.inv_dimensions.text_size)
+    self.lootbox_title_shadow:SetPosition(self:GetLootboxTitlePosition(current_box) + Vector2(1.5,1.5))
+
+end
+
 -- Updates a lootbox title (stash) and hides/shows it based on current box
-function cLootboxUI:UpdateLootboxTitle()
+function cLootboxUI:UpdateLootboxTitle(locked)
 
     local current_box = LootManager.current_box
 
@@ -82,26 +187,49 @@ function cLootboxUI:UpdateLootboxTitle()
 
         local is_owner = current_box.stash.owner_id == tostring(LocalPlayer:GetSteamId())
 
-        local text = string.format("%s (%d/%d)", 
-            is_owner and current_box.stash.name or "Stash", current_box.stash.num_items, current_box.stash.capacity)
+        local name = Lootbox.Stashes[current_box.tier].name
 
-        self.lootbox_title:SetText(text)
-        self.lootbox_title:SetTextSize(ClientInventory.ui.inv_dimensions.text_size)
-        self.lootbox_title:SetPosition(self:GetLootboxTitlePosition(current_box))
+        if current_box.stash and current_box.stash.name and is_owner then
+            name = current_box.stash.name
+        end 
 
-        self.lootbox_title_shadow:SetText(text)
-        self.lootbox_title_shadow:SetTextSize(ClientInventory.ui.inv_dimensions.text_size)
-        self.lootbox_title_shadow:SetPosition(self:GetLootboxTitlePosition(current_box) + Vector2(1.5,1.5))
+        self:SetLootboxTitle(name, locked and "?" or current_box.stash.num_items, current_box.stash.capacity)
 
         self.stash_dismount_button:SetPosition(
             self.lootbox_title:GetPosition()
             - Vector2(self.lootbox_title:GetSize().x + 20, 14))
         self.stash_dismount_button:SetTextSize(ClientInventory.ui.inv_dimensions.text_size)
 
+        self.access_mode_menu:SetPosition(self.stash_dismount_button:GetPosition() + 
+            Vector2(0, self.stash_dismount_button:GetHeight() * 2))
+
         if is_owner then
             self.stash_dismount_button:Show()
+            self.stash_dismount_button:SetText("DISMOUNT")
+            self.stash_dismount_button:SetTextColor(Color.Red)
+            self.stash_dismount_button:SetTextNormalColor(Color.Red)
+            self.stash_dismount_button:SetTextHoveredColor(Color.Red)
+            self.stash_dismount_button:SetTextPressedColor(Color.Red)
+            self.stash_dismount_button:SetTextDisabledColor(Color.Red)
+
+            if current_box.stash.can_change_access then
+                self.access_mode_menu:Show()
+            else
+                self.access_mode_menu:Hide()
+            end
         else
-            self.stash_dismount_button:Hide()
+            if current_box.tier == Lootbox.Types.Workbench and count_table(current_box.contents) > 0 then
+                self.stash_dismount_button:Show()
+                self.stash_dismount_button:SetText("COMBINE")
+                self.stash_dismount_button:SetTextColor(Color(0, 230, 0))
+                self.stash_dismount_button:SetTextNormalColor(Color(0, 230, 0))
+                self.stash_dismount_button:SetTextHoveredColor(Color(0, 230, 0))
+                self.stash_dismount_button:SetTextPressedColor(Color(0, 230, 0))
+                self.stash_dismount_button:SetTextDisabledColor(Color(0, 230, 0))
+            else
+                self.stash_dismount_button:Hide()
+            end
+            self.access_mode_menu:Hide()
         end
 
         local is_full = current_box.stash.num_items == current_box.stash.capacity
@@ -132,6 +260,10 @@ function cLootboxUI:LootboxSync(args)
     if not LootManager.current_box then return end
 
     LootManager:RecreateContents(args.contents)
+    LootManager.current_box.stash = args.stash
+
+    LootManager.loot[LootManager.current_box.cell.x][LootManager.current_box.cell.y][LootManager.current_box.uid] = LootManager.current_box
+
     self:Update({action = "full", stash = args.stash})
 
 end
@@ -142,8 +274,11 @@ function cLootboxUI:LootboxOpen(args)
     if not LootManager.current_box then return end
 
     LootManager:RecreateContents(args.contents)
+    LootManager.current_box.stash = args.stash
 
-    self:Update({action = "full", stash = args.stash})
+    LootManager.loot[LootManager.current_box.cell.x][LootManager.current_box.cell.y][LootManager.current_box.uid] = LootManager.current_box
+
+    self:Update({action = "full", stash = args.stash, locked = args.locked})
 
 end
 
@@ -174,8 +309,13 @@ function cLootboxUI:Update(args)
             end
             self:RepositionWindow(args.stash.capacity)
         end]]
-        if args.stash and #LootManager.current_box.contents == 0 then
+
+        if args.locked then
+            ClientInventory.ui:PopulateEntry({index = 1, loot = true, locked = true, window = self.window})
+        elseif args.stash and #LootManager.current_box.contents == 0 then
             ClientInventory.ui:PopulateEntry({index = 1, loot = true, empty = true, stash = args.stash, window = self.window})
+        elseif not args.stash and #LootManager.current_box.contents == 0 then 
+            ClientInventory.ui:PopulateEntry({index = 1, loot = true, empty = true, window = self.window})
         end
 
     elseif args.action == "update" or args.action == "remove" then
@@ -188,7 +328,7 @@ function cLootboxUI:Update(args)
         self:ToggleVisible()
     end
 
-    self:UpdateLootboxTitle()
+    self:UpdateLootboxTitle(args.locked)
 
 end
 
@@ -228,13 +368,14 @@ function cLootboxUI:ToggleVisible()
         Events:Unsubscribe(self.LPI)
         self.LPI = nil
         if LootManager.current_box then
-            Network:Send("Inventory/CloseBox" .. tostring(LootManager.current_box.uid)) -- Send event to close box
+            Network:Send(var("Inventory/CloseBox" .. tostring(LootManager.current_box.uid)):get()) -- Send event to close box
         end
     else
 
         self.window:Show()
         self.lootbox_title_window:Show()
         Mouse:SetPosition(Render.Size / 2)
+        self.window:BringToFront()
         --self:RepositionWindow()
         self.LPI = Events:Subscribe("LocalPlayerInput", self, self.LocalPlayerInput)
     end
@@ -253,8 +394,11 @@ function cLootboxUI:KeyUp(args)
 
         if self.window:GetVisible() then
             self:ToggleVisible()
-        elseif IsValid(LootManager.current_looking_box) and not self.window:GetVisible() then
+        elseif IsValid(LootManager.current_looking_box) 
+        and not self.window:GetVisible()
+        and LootManager.current_looking_box.position:Distance(LocalPlayer:GetPosition()) < 10 then
             LootManager.current_box = LootManager.current_looking_box
+            self:LootboxOpen(LootManager.current_box)
             Network:Send("Inventory/TryOpenBox" .. tostring(LootManager.current_looking_box.uid))
         end
         self.lootbox_title_window:SendToBack()

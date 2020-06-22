@@ -83,12 +83,21 @@ end
 function cItemUse:CompleteUsage()
 
     local ray = Physics:Raycast(LocalPlayer:GetPosition(), Vector3.Down, 0, 5)
-    if ray.entity and ray.entity.__type == "ClientStaticObject" then ray.entity = nil end
+    if ray.entity and ray.entity.__type == "ClientStaticObject" then
+        ray.model = ray.entity:GetModel()
+        ray.entity = nil
+        ray.hit_type = "ClientStaticObject"
+    end
 
     local forward_ray = Physics:Raycast(Camera:GetPosition(), Camera:GetAngle() * Vector3.Forward, 0, 500)
-    if forward_ray.entity and forward_ray.entity.__type == "ClientStaticObject" then forward_ray.entity = nil end
+    if forward_ray.entity and forward_ray.entity.__type == "ClientStaticObject" then
+        forward_ray.model = forward_ray.entity:GetModel()
+        forward_ray.entity = nil
+        forward_ray.hit_type = "ClientStaticObject"
+    end
 
-    Network:Send("items/CompleteItemUsage", {ray = ray, forward_ray = forward_ray, waypoint = Waypoint:GetPosition()})
+    local waypoint_pos, waypoint_set = Waypoint:GetPosition()
+    Network:Send(var("items/CompleteItemUsage"):get(), {ray = ray, forward_ray = forward_ray, waypoint = waypoint_pos, waypoint_set = waypoint_set})
     self:UnsubscribeEvents()
 
 end

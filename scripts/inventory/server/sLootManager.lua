@@ -20,14 +20,14 @@ end
 
 function sLootManager:ClientModuleLoad(args)
 
-    --local func = coroutine.wrap(function()
+    --Thread(function()
     --    while not self.ready do
     --        Timer.Sleep(500)
     --    end
     --    if IsValid(args.player) then
             Events:Fire("ForcePlayerUpdateCell", {player = args.player, cell_size = Lootbox.Cell_Size})
     --    end
-    --end)()
+    --end)
     
 end
 
@@ -70,7 +70,7 @@ function sLootManager:PlayerCellUpdate(args)
 
         for _, lootbox in pairs(LootCells.Loot[update_cell.x][update_cell.y]) do
             if lootbox.active then -- Only get active boxes
-                table.insert(lootbox_data, lootbox:GetSyncData())
+                table.insert(lootbox_data, lootbox:GetSyncData(args.player))
             end
         end
     end
@@ -79,7 +79,7 @@ function sLootManager:PlayerCellUpdate(args)
     Network:Send(args.player, "Inventory/LootboxCellsSync", {lootbox_data = lootbox_data})
 end
 
-function sLootManager:DespawnBox(box)
+--[[function sLootManager:DespawnBox(box)
     self.active_lootboxes[box.tier][box.uid] = nil
     self.inactive_lootboxes[box.tier][box.uid] = box
 end
@@ -99,9 +99,9 @@ function sLootManager:RespawnBox(tier)
     self.inactive_lootboxes[tier][box.uid] = nil
     self.active_lootboxes[tier][box.uid] = box
 
-    box:RefreshBox()
+    box:RespawnBox()
 
-end
+end]]
 
 function sLootManager:LoadFromFile()
 
@@ -110,6 +110,8 @@ function sLootManager:LoadFromFile()
     local counter = 0
 	local spawn_timer = Timer() -- time loot spawn time
     local file = io.open(self.lootspawn_file, "r") -- read from lootspawns.txt
+
+    local tiers = {}
     
 	if file ~= nil then -- file might not exist
 		for line in file:lines() do
@@ -119,6 +121,12 @@ function sLootManager:LoadFromFile()
 				counter = counter + 1
                 local tokens = line:split(",")
                 local tier = tonumber(tokens[1])
+
+                if not tiers[tier] then
+                    tiers[tier] = 1
+                else
+                    tiers[tier] = tiers[tier] + 1
+                end
 
                 -- If this box is a spawnable box
                 if Lootbox.GeneratorConfig.spawnable[tier] then
@@ -136,13 +144,16 @@ function sLootManager:LoadFromFile()
 		file:close()
 	else
 		print("Fatal Error: Could not load loot from file")
-	end
+    end
+    
+    print(string.format("Loaded: %d tier 1, %d tier 2, %d tier 3, %d tier 4", 
+        tiers[Lootbox.Types.Level1], tiers[Lootbox.Types.Level2], tiers[Lootbox.Types.Level3], tiers[Lootbox.Types.Level4]))
 
 end
 
 function sLootManager:GenerateAllLoot()
 
-    --local func = coroutine.wrap(function()
+    --Thread(function()
         local rand = math.random
 
         local sz_position = Vector3(-10291, 202.5, -3019)
@@ -166,6 +177,7 @@ function sLootManager:GenerateAllLoot()
                 angle = lootbox_data.ang,
                 tier = lootbox_data.tier,
                 active = active or in_sz,
+                in_sz = in_sz,
                 contents = in_sz and {} or ItemGenerator:GetLoot(lootbox_data.tier)
             })
 
@@ -188,7 +200,7 @@ function sLootManager:GenerateAllLoot()
             tostring(self:GetNumSpawnedBoxes()), tostring(#self.loot_data)))
 
         self.ready = true
-    --end)()
+    --end)
 
 end
 

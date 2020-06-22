@@ -2,14 +2,16 @@ class 'cLoader'
 
 function cLoader:__init()
 
+    self.load_time = Client:GetElapsedSeconds()
+
     self.resources_needed = 0
     self.resources_loaded = 0
 
     self.first_load = true
     self.can_add_resources = true
 
-    self.bg_image_grayscale = Image.Create(AssetLocation.Resource, "bg_image_grayscale")
-    self.bg_image_color = Image.Create(AssetLocation.Resource, "bg_image_color")
+    --self.bg_image_grayscale = Image.Create(AssetLocation.Resource, "bg_image_grayscale")
+    --self.bg_image_color = Image.Create(AssetLocation.Resource, "bg_image_color")
 
     self.window = BaseWindow.Create()
     self.window:SetSize(Render.Size)
@@ -27,14 +29,14 @@ function cLoader:__init()
     self.load_text_dots = 0;
     self.max_load_text_dots = 3
 
-    self.bg_grayscale = ImagePanel.Create(self.window)
-    self.bg_grayscale:SetImage(self.bg_image_grayscale)
-    self.bg_grayscale:SetSizeAutoRel(Vector2(1,1))
+    --self.bg_grayscale = ImagePanel.Create(self.window)
+    --self.bg_grayscale:SetImage(self.bg_image_grayscale)
+    --self.bg_grayscale:SetSizeAutoRel(Vector2(1,1))
     
-    self.bg_color = ImagePanel.Create(self.window)
-    self.bg_image_color:SetAlpha(0)
-    self.bg_color:SetImage(self.bg_image_color)
-    self.bg_color:SetSizeAutoRel(Vector2(1,1))
+    --self.bg_color = ImagePanel.Create(self.window)
+    --self.bg_image_color:SetAlpha(0)
+    --self.bg_color:SetImage(self.bg_image_color)
+    --self.bg_color:SetSizeAutoRel(Vector2(1,1))
 
     self.progressBar = ProgressBar.Create(self.window)
     self.progressBar:SetSize(Vector2(Render.Size.x * 0.925, Render.Size.y * 0.015))
@@ -46,6 +48,7 @@ function cLoader:__init()
     self.window:Hide()
 
     self.resources_for_gameload = 7
+    self.resources_for_loadscreen = 3
 
     self.delta = 0
 
@@ -58,6 +61,8 @@ function cLoader:__init()
     Events:Subscribe(var("ModulesLoad"):get(), self, self.ModulesLoad)
     Events:Subscribe(var("GameLoad"):get(), self, self.GameLoad)
     Events:Subscribe(var("LocalPlayerDeath"):get(), self, self.LocalPlayerDeath)
+
+    Events:Subscribe("SecondTick", self, self.SecondTick)
 
     -- Fire event for when modules reload
     Events:Fire(var("LoaderReady"):get())
@@ -75,25 +80,29 @@ function cLoader:StartLoad()
 
 end
 
+function cLoader:SecondTick()
+
+    if self.active then
+
+        if Game:GetState() == GUIState.Game and not self.loadscreen_complete then
+            self.loadscreen_complete = true
+
+            Timer.SetTimeout(1000, function()
+                self.resources_loaded = self.resources_loaded + self.resources_for_loadscreen
+                self:UpdateResourceCount()
+                self:Stop()
+            end)
+        end
+
+    end
+
+end
+
 function cLoader:InitialLoad()
 
-    self.resources_needed = self.resources_needed + self.resources_for_gameload 
-
     self.can_add_resources = true
+    self.resources_needed = self.resources_needed + self.resources_for_loadscreen
     
-    local func = coroutine.wrap(function()
-        while not self.game_loaded do
-
-            if Game:GetState() == GUIState.Game then
-                self:GameLoad()
-                self.game_loaded = true
-            end
-
-            Timer.Sleep(100)
-        end
-    end)()
-
-
     self:UpdateResourceCount()
     self:Start()
 
@@ -101,17 +110,29 @@ end
 
 function cLoader:GameLoad()
 
-    if not self.game_loaded then
-        self.game_loaded = true
-        self.resources_loaded = self.resources_loaded + self.resources_for_gameload / 2
-        self:UpdateResourceCount()
-        Timer.SetTimeout(3000, function()
-            self.game_loaded = true
-            self.resources_loaded = self.resources_loaded + self.resources_for_gameload / 2
+    self.game_loaded = true
+    self.resources_needed = self.resources_needed + self.resources_for_gameload
+    self:UpdateResourceCount()
+    Thread(function()
+        local load_time_max = (Client:GetElapsedSeconds() - self.load_time) * 1500 + 1000
+        local load_time = 0
+        local interval = 100
+        local percent = interval / load_time_max
+
+        while load_time < load_time_max do
+            load_time = load_time + interval
+            self.resources_loaded = self.resources_loaded + self.resources_for_gameload * percent
             self:UpdateResourceCount()
-            self:Stop()
-        end)
-    end
+            Timer.Sleep(interval)
+        end
+
+        if self.resources_loaded > self.resources_needed then
+            self.resources_loaded = self.resources_needed
+        end
+
+        self:UpdateResourceCount()
+        self:Stop()
+    end)
 
 end
 
@@ -120,11 +141,15 @@ function cLoader:LocalPlayerDeath()
     self.resources_needed = 0
     self.resources_loaded = 0
     self.game_loaded = false
+    self.loadscreen_complete = false
 
-    Timer.SetTimeout(5000, function()
-        self.resources_needed = self.resources_needed + self.resources_for_gameload
+    Thread(function()
+        Timer.Sleep(5000)
+        self.load_time = Client:GetElapsedSeconds() - 4
+        self.resources_needed = self.resources_needed + self.resources_for_loadscreen
         self:UpdateResourceCount()
         self:Start()
+        
     end)
 
 end
@@ -147,13 +172,19 @@ function cLoader:Render(args)
         local add = math.ceil(((self.target_value - val) * args.delta * 1.75) * 1000) / 1000
         self.progressBar:SetValue(val + add)
 
-        self.bg_image_color:SetAlpha(self.progressBar:GetValue())
-        self.bg_color:SetImage(self.bg_image_color)
+        --self.bg_image_color:SetAlpha(self.progressBar:GetValue())
+        --self.bg_color:SetImage(self.bg_image_color)
     elseif math.ceil(val * 100) == 100 then
         self:Stop()
     end
 
     self.delta = self.delta + args.delta * 0.2
+
+    if not IsValid(self.sound) then
+        self:PlayMusic()
+    else
+        self.sound:SetPosition(Camera:GetPosition())
+    end
 
 end
 
@@ -166,6 +197,17 @@ count: how many resources we are waiting for (no need to specify for images)
 
 ]]--
 
+function cLoader:PlayMusic()
+    if not IsValid(self.sound) then
+        self.sound = ClientSound.Create(AssetLocation.Game, {
+            bank_id = 25,
+            sound_id = 43,
+            position = Camera:GetPosition(),
+            angle = Angle()
+        })
+    end
+end
+
 function cLoader:Start()
 
     if self.resources_needed == self.resources_loaded or self.resources_needed == 0 then return end
@@ -176,6 +218,12 @@ function cLoader:Start()
 
     Game:FireEvent("ply.pause")
     Game:FireEvent("ply.invulnerable")
+
+    if not IsValid(self.sound) then
+        self:PlayMusic()
+    else
+        self.sound:SetPosition(Camera:GetPosition())
+    end
 
     if not self.active then
         Network:Send(var("LoadStatus"):get())
@@ -247,6 +295,11 @@ function cLoader:Stop()
         if self.target_value - self.progressBar:GetValue() > 0.1 then return end
 
         self.window:Hide()
+
+        if IsValid(self.sound) then
+            self.sound:Remove()
+            self.sound = nil
+        end
 
         if self.active then
             Network:Send(var("LoadStatus"):get(), {status = var("done"):get()})

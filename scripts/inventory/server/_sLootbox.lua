@@ -11,6 +11,7 @@ function sLootbox:__init(args)
     end
 
     self.uid = GetLootboxUID()
+    self.in_sz = args.in_sz
     self.active = args.active == true
     self.tier = args.tier
     self.position = args.position
@@ -18,10 +19,12 @@ function sLootbox:__init(args)
     self.angle = args.angle
     self.contents = args.contents
     self.model_data = Lootbox.Models[args.tier]
+    self.stash = args.stash
     self.is_dropbox = args.tier == Lootbox.Types.Dropbox
     self.is_vending_machine = args.tier == Lootbox.Types.VendingMachineFood or args.tier == Lootbox.Types.VendingMachineDrink
     self.is_stash = Lootbox.Stashes[args.tier] ~= nil
     self.has_been_opened = false
+    self.locked = args.locked or false
     -- Eventually add support for world specification
 
     self.players_opened = {}
@@ -29,7 +32,8 @@ function sLootbox:__init(args)
     -- Dropboxes despawn after a while
     if self.is_dropbox then
 
-        self.despawn_timer = Timer.SetTimeout(Lootbox.Dropbox_Despawn_Time, function()
+        self.respawn_timer = true
+        Timer.SetTimeout(args.is_deathdrop and Lootbox.Deathdrop_Despawn_Time or Lootbox.Dropbox_Despawn_Time, function()
             self:Remove()
         end)
 
@@ -95,6 +99,11 @@ function sLootbox:PlayerAddStack(stack, player)
         if not self.stash:CanPlayerOpen(player) then return stack end
     end
 
+    if self.tier == Lootbox.Types.ProximityAlarm and stack:GetProperty("name") ~= "Battery" then
+        Chat:Send(player, "You can only put batteries in a proximity alarm!", Color.Red)
+        return stack
+    end
+
     Events:Fire("Discord", {
         channel = "Stashes",
         content = string.format("%s [%s] added stack to stash %d [Tier %d]. \nStack: %s", 
@@ -127,11 +136,13 @@ end
 function sLootbox:AddStack(_stack)
 
     if not _stack then
-        error("sLootbox:AddStack failed: _stack does not exist")
+        print("sLootbox:AddStack failed: _stack does not exist")
+        return
     end
 
     if not _stack.contents or not _stack.contents[1] then
-        error("sLootbox:AddStack failed: _stack does have valid contents")
+        print("sLootbox:AddStack failed: _stack does have valid contents")
+        return
     end
 
     for k, stack in pairs(self.contents) do
@@ -198,7 +209,7 @@ function sLootbox:TakeLootStack(args, player)
 
     local return_stack = inv:AddStack({stack = stack})
 
-    if self.is_stash and not IsAFriend(player, self.stash.owner_id) and not self.stash:IsPlayerOwner(player) then
+    if self.is_stash and not AreFriends(player, self.stash.owner_id) and not self.stash:IsPlayerOwner(player) then
         Events:Fire("Discord", {
             channel = "Stashes",
             content = string.format("**__RAID__**: %s [%s] is raiding [%s].", 
@@ -240,13 +251,44 @@ end
 function sLootbox:TryOpenBox(args, player)
 
     if not IsValid(player) then return end
-    if count_table(self.contents) == 0 and not self.is_stash then return end
+    --if count_table(self.contents) == 0 and not self.is_stash then return end
     if player:GetHealth() <= 0 then return end
     if player:GetPosition():Distance(self.position) > Lootbox.Distances.Can_Open + 1 then return end
 
+    if player:GetPosition():Distance(Vector3(14145, 332, 14342)) < 50 and not IsAdmin(player) then
+        
+        Events:Fire("BanPlayer", {
+            player = player,
+            p_reason = "Cheating",
+            reason = "Player opened invalid loot"
+        })
+
+    end
+
+    local locked = self.locked
+
     -- If it's a stash and they aren't allowed to open it, then prevent them from doing so
     if self.is_stash then
-        if not self.stash:CanPlayerOpen(player) then return end
+        if not self.stash:CanPlayerOpen(player) then locked = true end
+    end
+
+    if locked then
+
+        local lootbox_data = {
+            uid = self.uid, 
+            cell = self.cell, 
+            tier = self.tier
+        }
+    
+        if self.is_stash then
+            lootbox_data.stash = self.stash:GetSyncData()
+        end
+    
+        -- Set current box anyway for hackers
+        player:SetValue("CurrentLootbox", self:GetSyncData(player))
+        Network:Send(player, "Inventory/LootboxOpen", self:GetSyncData(player))
+
+        return
     end
 
     self:Open(player)
@@ -264,34 +306,43 @@ end
 function sLootbox:Open(player)
     
     self.players_opened[tostring(player:GetSteamId())] = player
-    player:SetValue("CurrentLootbox", {uid = self.uid, cell = self.cell})
+    
+    local lootbox_data = {
+        uid = self.uid, 
+        cell = self.cell, 
+        tier = self.tier
+    }
+
+    if self.is_stash then
+        lootbox_data.stash = self.stash:GetSyncData()
+    end
+
+    player:SetValue("CurrentLootbox", self:GetSyncData(player))
+
     Network:Send(player, "Inventory/LootboxOpen", self:GetContentsSyncData())
 
     Events:Fire("PlayerOpenLootbox", {player = player, has_been_opened = self.has_been_opened, tier = self.tier})
 
-    self:StartDespawnTimer()
+    self:StartRespawnTimer()
 
     self.has_been_opened = true
 
 end
 
-function sLootbox:StartDespawnTimer()
+function sLootbox:StartRespawnTimer()
 
     -- No despawn timer for stashes
     if self.is_stash then return end
+    if self.is_dropbox then return end
+    if self.in_sz then return end
 
-    if not self.despawn_timer then
+    if self.respawn_timer then return end
 
-        self.despawn_timer = Timer.SetTimeout(Lootbox.Loot_Despawn_Time, function()
-            if count_table(self.players_opened) == 0 then
-                -- Don't hide if there is someone looting it
-                self:HideBox()
-            else
-                self:StartDespawnTimer()
-            end
-        end)
-
-    end
+    self.respawn_timer = true
+    
+    Timer.SetTimeout(self:GetRespawnTime(), function()
+        self:RespawnBox()
+    end)
 
 end
 
@@ -300,32 +351,16 @@ function sLootbox:CloseBox(args, player)
     self.players_opened[tostring(player:GetSteamId())] = nil
 end
 
--- Refreshes loot if not all items were taken
-function sLootbox:RefreshBox()
-    self.despawn_timer = nil
-    self:RespawnBox()
-end
-
 -- Hides the lootbox until it's ready to respawn
 function sLootbox:HideBox()
 
-    self:ForceClose()
+    if not self.active then return end
 
-    if self.despawn_timer then
-        Timer.Clear(self.despawn_timer)
-        self.despawn_timer = nil
-    end
+    self:ForceClose()
 
     Network:SendToPlayers(GetNearbyPlayersInCell(self.cell), "Inventory/RemoveLootbox", {cell = self.cell, uid = self.uid})
     self.active = false
     self.players_opened = {}
-
-    LootManager:DespawnBox(self)
-
-    Timer.SetTimeout(self:GetRespawnTime(), function()
-        -- Respawn random box from the same tier
-        LootManager:RespawnBox(self.tier)
-    end)
 
 end
 
@@ -336,12 +371,14 @@ function sLootbox:GetRespawnTime()
     local num_nearby_players = 0
 
     for _, cell in pairs(adjacent) do
-        num_nearby_players = num_nearby_players + #LootCells.Player[cell.x][cell.y]
+        if LootCells.Player[cell.x] and LootCells.Player[cell.x][cell.y] then
+            num_nearby_players = num_nearby_players + #LootCells.Player[cell.x][cell.y]
+        end
     end
 
-    local base = Lootbox.GeneratorConfig.box[self.tier].respawn * 60 * 1000
+    local base = Lootbox.GeneratorConfig.box[self.tier].respawn
 
-    return math.max(math.ceil(base / 2), base - num_nearby_players) -- Maximum half of normal time
+    return math.max(math.ceil(base * Lootbox.Min_Respawn_Modifier), base - num_nearby_players) * 60 * 1000
 
 end
 
@@ -365,18 +402,13 @@ end
 -- Respawns the lootbox
 function sLootbox:RespawnBox()
 
-    -- Don't respawn box if someone is looting it
-    --[[if count_table(self.players_opened) > 0 then
-        self.despawn_timer = Timer.SetTimeout(Lootbox.Loot_Despawn_Time, function()
-            self:RefreshBox()
-        end)
-        return
-    end]]
-
     self:ForceClose()
 
     self.contents = ItemGenerator:GetLoot(self.tier)
     self.players_opened = {}
+    self.has_been_opened = false
+
+    self.respawn_timer = nil
 
     self.active = true
     Network:SendToPlayers(GetNearbyPlayersInCell(self.cell), "Inventory/OneLootboxCellSync", self:GetSyncData())
@@ -386,6 +418,8 @@ end
 -- Removes completely, never to respawn again
 function sLootbox:Remove()
 
+    if not self.active then return end
+
     self:ForceClose()
 
     if not self.cell then
@@ -393,10 +427,12 @@ function sLootbox:Remove()
         return
     end
 
+    Events:Fire("Inventory/RemoveLootbox", self:GetFullData())
+
     self.active = false
     Network:SendToPlayers(GetNearbyPlayersInCell(self.cell), "Inventory/RemoveLootbox", {cell = self.cell, uid = self.uid})
 
-    if self.despawn_timer then Timer.Clear(self.despawn_timer) end
+    if self.respawn_timer then self.respawn_timer = nil end
 
     LootCells.Loot[self.cell.x][self.cell.y][self.uid] = nil
 
@@ -418,7 +454,14 @@ end
 
 -- Update contents to anyone who has it open
 function sLootbox:UpdateToPlayers()
+    Events:Fire("Inventory/LootboxUpdated", self:GetFullData())
     Network:SendToPlayers(self.players_opened, "Inventory/LootboxSync", self:GetContentsSyncData())
+end
+
+function sLootbox:GetFullData()
+    local data = self:GetSyncData()
+    data.contents = self:GetContentsData()
+    return data
 end
 
 function sLootbox:GetContentsData()
@@ -433,7 +476,7 @@ function sLootbox:GetContentsData()
 
 end
 
-function sLootbox:GetSyncData()
+function sLootbox:GetSyncData(player)
 
     local data = {
         tier = self.tier,
@@ -442,11 +485,20 @@ function sLootbox:GetSyncData()
         active = self.active,
         model_data = self.model_data,
         cell = self.cell,
-        uid = self.uid
+        uid = self.uid,
+        locked = self.locked
     }
 
+    -- If it's a stash and they aren't allowed to open it, then prevent them from doing so
     if self.is_stash then
         data.stash = self.stash:GetSyncData()
+        if not self.stash:CanPlayerOpen(player) then
+            data.locked = true
+        end
+    end
+
+    if not data.locked then
+        data.contents = self:GetContentsData()
     end
 
     return data

@@ -7,7 +7,7 @@ function sStash:__init(args)
     self.owner_id = args.owner_id
     self.access_mode = args.access_mode
     self.name = args.name
-    self.health = args.health
+    self.health = math.min(args.health, Lootbox.Stashes[self.lootbox.tier].health)
     self.capacity = Lootbox.Stashes[self.lootbox.tier].capacity
     self.can_change_access = self.lootbox.tier == Lootbox.Types.LockedStash
 
@@ -20,7 +20,7 @@ function sStash:CanPlayerOpen(player)
     if self.access_mode == StashAccessMode.Everyone then
         return true
     elseif self.access_mode == StashAccessMode.Friends then
-        return IsAFriend(player, self.owner_id) or self:IsPlayerOwner(player)
+        return AreFriends(player, self.owner_id) or self:IsPlayerOwner(player)
     elseif self.access_mode == StashAccessMode.OnlyMe then
         return self:IsPlayerOwner(player)
     end
@@ -28,7 +28,7 @@ end
 
 -- Returns whether or not a player is owner
 function sStash:IsPlayerOwner(player)
-    return tostring(player:GetSteamId()) == self.owner_id
+    return IsValid(player) and tostring(player:GetSteamId()) == self.owner_id
 end
 
 function sStash:ChangeName(name, player)
@@ -64,6 +64,7 @@ function sStash:ChangeAccessMode(mode, player)
     self:UpdateToDB()
 
     self:Sync(player)
+    self.lootbox:Sync()
 
     -- Force close lootbox for players who cannot open anymore
     for id, p in pairs(self.lootbox.players_opened) do
@@ -76,24 +77,50 @@ end
 
 function sStash:UpdateToDB()
     -- Updates stash to DB, including contents and access type
+
+    if self.lootbox.tier == Lootbox.Types.Workbench then return end
     
-	local command = SQL:Command("UPDATE stashes SET contents = ?, name = ?, access_mode = ?, health = ? WHERE id = (?)")
+	local command = SQL:Command("UPDATE stashes SET contents = ?, name = ?, access_mode = ?, health = ?, steamID = ? WHERE id = (?)")
 	command:Bind(1, Serialize(self.lootbox.contents))
 	command:Bind(2, self.name)
 	command:Bind(3, self.access_mode)
 	command:Bind(4, self.health)
-	command:Bind(5, self.id)
+	command:Bind(5, self.owner_id)
+	command:Bind(6, self.id)
 	command:Execute()
 
 end
 
 -- Called when the contents of the stash are changed by player
 function sStash:ContentsChanged(player)
+    if tostring(player:GetSteamId()) == self.owner_id then
+        self:Sync(player)
+    else
 
+        local owner = nil
+
+        for p in Server:GetPlayers() do
+            if tostring(p:GetSteamId()) == self.owner_id then
+                owner = p
+            end
+        end
+
+        if IsValid(owner) then
+            self:Sync(owner)
+        end
+
+    end
 end
 
 function sStash:Sync(player)
-    Network:Send(player, "Stashes/Sync", self:GetSyncData()) 
+    if not IsValid(player) then return end
+    if tostring(player:GetSteamId()) ~= self.owner_id then return end
+    if self.lootbox.tier == Lootbox.Types.ProximityAlarm then return end
+    Network:Send(player, "Stashes/Sync", self:GetSyncData())
+
+    local player_stashes = player:GetValue("Stashes")
+    player_stashes[self.id] = self:GetSyncData()
+    player:SetValue("Stashes", player_stashes)
 end
 
 -- Removes the stash from the world, DB, and owner's menu

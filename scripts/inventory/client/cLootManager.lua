@@ -3,6 +3,7 @@ class 'cLootManager'
 function cLootManager:__init()
 
     self.loot = {} -- Create 2D array to store loot in cells
+    self.objects = {}
     self.current_box = nil -- Current opened box
     self.close_to_box = false -- If they are close enough to a box that we should raycast
 
@@ -20,8 +21,49 @@ function cLootManager:__init()
     Network:Subscribe(var("Inventory/ForceCloseLootbox"):get(), self, self.ForceCloseLootbox)
     
     Events:Subscribe("ModuleUnload", self, self.Unload)
+    Events:Subscribe(var("LocalPlayerChat"):get(), self, self.LocalPlayerChat)
 
     Events:Subscribe("Cells/LocalPlayerCellUpdate" .. tostring(Lootbox.Cell_Size), self, self.LocalPlayerCellUpdate)
+
+    if IsAdmin(LocalPlayer) then
+        self.stash_render = Events:Subscribe("Render", self, self.StashRender)
+    end
+
+end
+
+function cLootManager:LocalPlayerChat(args)
+
+    if not IsAdmin(LocalPlayer) then return end
+
+    if args.text == "/showstashes" then
+        if not self.stash_render then
+            self.stash_render = Events:Subscribe("Render", self, self.StashRender)
+        else
+            self.stash_render = Events:Unsubscribe(self.stash_render)
+        end
+    end
+
+end
+
+function cLootManager:StashRender(args)
+
+    if not IsAdmin(LocalPlayer) then return end
+
+    for x, data in pairs(self.loot) do
+        for y, data in pairs(self.loot[x]) do
+            for id, box in pairs(self.loot[x][y]) do
+                if Lootbox.Stashes[box.tier] then
+                    local pos, on_screen = Render:WorldToScreen(box.position)
+                    if on_screen then
+                        Render:FillCircle(pos, 12, Color.Black)
+                        Render:FillCircle(pos, 10, Color.Red)
+                        Render:DrawText(pos + Vector2(22, 2), box.stash.owner_id, Color.Black, 24)
+                        Render:DrawText(pos + Vector2(20, 0), box.stash.owner_id, Color.Red, 24)
+                    end
+                end
+            end
+        end
+    end
 
 end
 
@@ -102,12 +144,13 @@ function cLootManager:Render(args)
         or 99
 
     if not found_box and (not ClientInventory.lootbox_ui.window:GetVisible() or dist > Lootbox.Distances.Can_Open) then 
-        self.current_looking_box = nil
-        self.current_box = nil
 
         if ClientInventory.lootbox_ui.window:GetVisible() then
             ClientInventory.lootbox_ui:ToggleVisible()
         end
+
+        self.current_looking_box = nil
+        self.current_box = nil
 
         LocalPlayer:SetValue("LookingAtLootbox", false)
 
@@ -119,16 +162,23 @@ function cLootManager:RecreateContents(_contents)
 
     local contents = {}
 
+    local index = 1
+
     -- Create new shItem and shStack instances for the client
     for k,v in pairs(_contents) do
 
         local items = {}
 
         for i, j in ipairs(v.contents) do
-            items[i] = shItem(j)
+            if type(j) == "userdata" or count_table(j) > 0 then
+                items[i] = shItem(j)
+            end
         end
 
-        contents[k] = shStack({contents = items, uid = v.uid})
+        if count_table(items) > 0 then
+            contents[index] = shStack({contents = items, uid = v.uid})
+            index = index + 1
+        end
 
     end
 
@@ -212,7 +262,8 @@ end
 
 function cLootManager:LootboxCellsSync(data)
     
-	-- spawn the boxes that the server has already for newly streamed cells
+    -- spawn the boxes that the server has already for newly streamed cells
+    Thread(function()
     for _, box_data in pairs(data.lootbox_data) do
         
         VerifyCellExists(self.loot, box_data.cell)
@@ -223,8 +274,10 @@ function cLootManager:LootboxCellsSync(data)
 
         if box_data.active then
             self.loot[box_data.cell.x][box_data.cell.y][box_data.uid] = cLootbox(box_data)
+            Timer.Sleep(2)
         end
     end
+    end)
 
 end
 

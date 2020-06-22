@@ -8,29 +8,25 @@ function shItem:__init(args)
     not args.amount or 
     args.amount < 1 or
     not args.category or 
-    not args.rarity or 
     not args.stacklimit 
     then
-        error("shItem:__init failed: missing a key piece of information")
-        print(debug.traceback())
+        error(debug.traceback("shItem:__init failed: missing a key piece of information"))
     end
 
     if not CategoryExists(args.category) then
-        error("shItem:__init failed: category does not exist: " .. args.category)
-        print(debug.traceback())
+        error(debug.traceback("shItem:__init failed: category does not exist: " .. args.category))
     end
 
     self.uid = args.uid or GetUID()
     self.name = args.name
     self.amount = args.amount
     self.category = args.category
-    self.rarity = args.rarity
     self.stacklimit = args.stacklimit
     self.durable = args.durable
     self.custom_data = args.custom_data or {}
     self.nodrop = args.nodrop or false
 
-    self:GetCustomData();
+    self:GetCustomData()
 
     if args.equipped then
         self.equipped = args.equipped
@@ -39,7 +35,7 @@ function shItem:__init(args)
     if args.durability then
 
         if args.amount > 1 then
-            error("shItem:__init failed: durability was given but item had more than one amount")
+            error(debug.traceback("shItem:__init failed: durability was given but item had more than one amount"))
         end
 
         self.durability = args.durability
@@ -47,7 +43,7 @@ function shItem:__init(args)
         if args.max_durability then
             self.max_durability = args.max_durability
         else
-            error("shItem:__init failed: max_durability was not given when an item had durability")
+            error(debug.traceback("shItem:__init failed: max_durability was not given when an item had durability"))
         end
     end
 
@@ -57,7 +53,7 @@ function shItem:__init(args)
         self.can_equip = args.can_equip
 
         if args.equip_type == nil then
-            error("shItem:__init failed: equip_type was not given for an equippable item: " .. tostring(self.name))
+            error(debug.traceback("shItem:__init failed: equip_type was not given for an equippable item: " .. tostring(self.name)))
         end
 
         self.equip_type = args.equip_type
@@ -71,7 +67,40 @@ end
 -- Gets custom data if there is any
 function shItem:GetCustomData()
 
-    -- Custom data logic here
+	-- Checks if item is Car Paint and does not yet have custom data assigned to it
+    if self.name == "Car Paint" and not self.custom_data.color then
+	
+		-- Color rarity table
+		local cRarity = {
+			["Red"] = 0.1,
+			["Green"] = 0.1,
+			["Blue"] = 0.1,
+			["Purple"] = 0.1,
+			["Pink"] = 0.1,
+			["Nyan"] = 0.1,
+			["Lime"] = 0.1,
+			["Orange"] = 0.1,
+			["Yellow"] = 0.1,
+			["White"] = 0.025,
+            ["Black"] = 0.025,
+            ["Brown"] = 0.025,
+            ["DarkGreen"] = 0.025
+		}
+	
+		-- Selects color and assigns to the item
+		local sum = 0
+		local target = math.random() 
+		for name, rarity in pairs(cRarity) do
+			sum = sum + rarity
+			if target <= sum then
+				self.custom_data.color = name
+				break
+			end
+		end
+		
+	end
+	
+	-- Additional custom data will be added here
 
 end
 
@@ -81,7 +110,6 @@ function shItem:Equals(item)
         self.name == item.name and
         self.amount == item.amount and
         self.category == item.category and
-        self.rarity == item.rarity and
         self.stacklimit == item.stacklimit and
         self.can_use == item.can_use and
         self.equip_type == item.equip_type and
@@ -118,7 +146,6 @@ function shItem:GetSyncObject()
         name = self.name,
         amount = self.amount,
         category = self.category,
-        rarity = self.rarity,
         stacklimit = self.stacklimit,
         durable = self.durable,
         durability = self.durability,
@@ -135,8 +162,18 @@ end
 
 function shItem:ToString()
 
-    return self.name .. " [x" .. self.amount .. "] "
+    local msg = self.name .. " [x" .. self.amount .. "] "
     .. "SL: " .. self.stacklimit .. " Dura: " .. tostring(self.durability) .. "/" .. tostring(self.max_durability)
+
+    if count_table(self.custom_data) > 0 then
+        msg = msg .. " "
+        for key, value in pairs(self.custom_data) do
+            msg = msg .. tostring(key) .. ": " .. tostring(value) .. " "
+        end
+    end
+
+    return msg
+
 end
 
 function concat_bool(b)

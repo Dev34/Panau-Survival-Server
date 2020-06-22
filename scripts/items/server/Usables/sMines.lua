@@ -7,7 +7,7 @@ function sMines:__init()
     self.mines = {} -- Active mines, indexed by mine id
     self.mine_cells = {} -- Active mines, organized by cell x, y, then mine id
 
-    self.sz_config = SharedObject.GetByName("SafezoneConfig"):GetValues()
+    Console:Subscribe("clearbadmines", self, self.ClearBadMines)
 
     Network:Subscribe("items/CompleteItemUsage", self, self.CompleteItemUsage)
     Network:Subscribe("items/StepOnMine", self, self.StepOnMine)
@@ -17,6 +17,55 @@ function sMines:__init()
     Events:Subscribe("Cells/PlayerCellUpdate" .. tostring(ItemsConfig.usables.Mine.cell_size), self, self.PlayerCellUpdate)
     Events:Subscribe("ClientModuleLoad", self, self.ClientModuleLoad)
     Events:Subscribe("items/ItemExplode", self, self.ItemExplode)
+end
+
+function sMines:ClearBadMines()
+
+    Thread(function()
+        print("Clearing bad mines...")
+        for id, mine in pairs(self.mines) do
+
+            local waiting = true
+
+            local sub = nil
+            sub = Events:Subscribe("IsTooCloseToLootCheck"..tostring(id), function(args)
+            
+                Events:Unsubscribe(sub)
+                sub = nil
+
+                if args.too_close then
+
+                    local cmd = SQL:Command("DELETE FROM mines where id = ?")
+                    cmd:Bind(1, id)
+                    cmd:Execute()
+
+                    -- Remove mine
+                    local cell = mine:GetCell()
+                    self.mine_cells[cell.x][cell.y][args.id] = nil
+                    self.mines[args.id] = nil
+                    mine:Remove()
+                    
+                end
+
+                waiting = false
+
+            end)
+
+            args = {}
+
+            args.position = mine.position
+            args.id = tostring(id)
+            Events:Fire("CheckIsTooCloseToLoot", args)
+
+            while waiting do
+                Timer.Sleep(10)
+            end
+
+        end
+
+        print("All bad mines cleared.")
+    end)
+
 end
 
 function sMines:ItemExplode(args)
@@ -57,10 +106,20 @@ function sMines:DestroyMine(args, player)
     self.mines[args.id] = nil
     mine:Remove(player)
 
+    local exp_enabled = true
+
+    if mine.place_time and Server:GetElapsedSeconds() - mine.place_time < 60 * 60 then
+        exp_enabled = false
+    end
+
     Events:Fire("items/ItemExplode", {
         position = mine.position,
         radius = 10,
-        player = player
+        player = player,
+        owner_id = mine.owner_id,
+        type = DamageEntity.Mine,
+        no_detonation_source = args.no_detonation_source,
+        exp_enabled = exp_enabled
     })
 
 end
@@ -155,7 +214,10 @@ function sMines:StepOnMine(args, player)
                 Events:Fire("items/ItemExplode", {
                     position = mine.position,
                     radius = 10,
-                    player = player
+                    player = player,
+                    owner_id = mine.owner_id,
+                    type = DamageEntity.Mine,
+                    no_detonation_source = true
                 })
             end
 
@@ -229,12 +291,14 @@ function sMines:PlaceMine(position, angle, player)
         return
     end
     
-    self:AddMine({
+    local mine = self:AddMine({
         id = result[1].id,
         owner_id = steamID,
         position = position,
         angle = angle
-    }):SyncNearby(player)
+    })
+    mine:SyncNearby(player)
+    mine.place_time = Server:GetElapsedSeconds()
 
     Network:Send(player, "items/MinePlaceSound", {position = position})
     Network:SendNearby(player, "items/MinePlaceSound", {position = position})
@@ -256,7 +320,7 @@ function sMines:TryPlaceMine(args, player)
     args.ray.position = Vector3(args.ray.position.x, math.max(args.ray.position.y, player:GetPosition().y), args.ray.position.z)
     local angle = Angle.FromVectors(Vector3.Down, args.ray.normal) * Angle(0, math.pi / 2, 0)
 
-    local player_iu = player:GetValue("ItemUse")
+    local player_iu = args.player_iu
 
     if player_iu.item and ItemsConfig.usables[player_iu.item.name] and player_iu.using and player_iu.completed
         and player_iu.item.name == "Mine" then
@@ -302,15 +366,53 @@ function sMines:CompleteItemUsage(args, player)
             return
         end
 
+        if not self.sz_config then
+            self.sz_config = SharedObject.GetByName("SafezoneConfig"):GetValues()
+        end
+
+        if args.ray.model and DisabledPlacementModels[args.ray.model] then
+            Chat:Send(player, "Placing mine failed!", Color.Red)
+            return
+        end
+    
         -- If they are within sz radius * 2, we don't let them place that close
         if player:GetPosition():Distance(self.sz_config.safezone.position) < self.sz_config.safezone.radius * 2 then
             Chat:Send(player, "Cannot place mines while near the safezone!", Color.Red)
             return
         end
 
-    end
+        local BlacklistedAreas = SharedObject.GetByName("BlacklistedAreas"):GetValues().blacklist
 
-    self:TryPlaceMine(args, player)
+        for _, area in pairs(BlacklistedAreas) do
+            if player:GetPosition():Distance(area.pos) < area.size then
+                Chat:Send(player, "You cannot place mines here!", Color.Red)
+                return
+            end
+        end
+
+        local sub = nil
+        sub = Events:Subscribe("IsTooCloseToLootCheck"..tostring(player:GetSteamId()), function(args)
+        
+            Events:Unsubscribe(sub)
+            sub = nil
+    
+            if args.too_close then
+    
+                Chat:Send(player, "Cannot place mines too close to loot!", Color.Red)
+                return
+    
+            end
+    
+            self:TryPlaceMine(args, args.player)
+
+        end)
+    
+        args.position = args.ray.position
+        args.player = player
+        args.player_iu = deepcopy(player_iu)
+        Events:Fire("CheckIsTooCloseToLoot", args)
+    
+    end
 
 end
 

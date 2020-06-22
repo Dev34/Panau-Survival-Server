@@ -68,6 +68,7 @@ function Deserialize(data, has_categories)
         
             local split3 = splitstr2(split2[j], "=")
             local item_data = {}
+            item_data.custom_data = {}
 
             for k = 1, #split3 do -- Each property within the item
 
@@ -98,9 +99,11 @@ function Deserialize(data, has_categories)
                 
                 elseif (split3[k]:sub(1, 1) == "N" and k > 3) then -- Custom property/data
                 
-                    local replaced = split3[k]:gsub("N", "")
+                    local replaced = split3[k]:sub(2, split3[k]:len())
                     local replaced_split = splitstr(replaced, ">")
-                    item_data.custom_data[replaced_split[0]] = replaced_split[1]
+                    if replaced_split[1] and replaced_split[2] then
+                        item_data.custom_data[replaced_split[1]] = replaced_split[2]
+                    end
                 end
                 
             end

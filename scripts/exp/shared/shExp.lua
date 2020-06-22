@@ -16,7 +16,7 @@ Exp =
     {
         [DamageEntity.None] = 20,
         [DamageEntity.Physics] = 60,
-        [DamageEntity.Bullet] = 100,
+        [DamageEntity.Bullet] = 90,
         [DamageEntity.Explosion] = 90,
         [DamageEntity.Vehicle] = 50,
         [DamageEntity.ToxicGrenade] = 80,
@@ -30,10 +30,44 @@ Exp =
         [DamageEntity.VehicleGuard] = 40,
         [DamageEntity.WarpGrenade] = 0,
         [DamageEntity.Suicide] = 60,
-        [DamageEntity.AdminKill] = 0
+        [DamageEntity.AdminKill] = 0,
+        [DamageEntity.C4] = 80,
+        [DamageEntity.MeleeGrapple] = 30,
+        [DamageEntity.MeleeKick] = 30,
+        [DamageEntity.MeleeSlidingKick] = 30,
+        [DamageEntity.CruiseMissile] = 90,
+        [DamageEntity.AreaBombing] = 80,
+        [DamageEntity.TacticalNuke] = 80,
     },
-    KillExpireTime = 60 * 60 * 24, -- Timer for killing the same person. If killed again before this timer expires, no exp is given
-    Level0ExpCutoffLevel = 5 -- Level where you stop getting exp for killing level 0 players
+    Hack = 
+    {
+        [13] = 60, -- Locked Stash
+        [14] = 12 -- Proximity Alarm
+    },
+    DestroyStash = 
+    {
+        [11] = 30, -- Barrel Stash
+        [12] = 50, -- Garbage Stash
+        [13] = 100, -- Locked Stash
+        [14] = 6 -- Proximity alarm
+    },
+    DestroyExplosive = 
+    {
+        [DamageEntity.Mine] = 5,
+        [DamageEntity.Claymore] = 5,
+        [DamageEntity.C4] = 10
+    },
+    KillExpireTime = 60 * 60 * 8, -- Timer for killing the same person. If killed again before this timer expires, no exp is given
+    LevelCutoffs = -- Level cutoffs for no exp for these players
+    {
+        [0] = -1,
+        [3] = 0,
+        [10] = 1,
+        [15] = 2,
+        [20] = 3,
+        [25] = 4,
+        [30] = 5
+    }
 }
 
 
@@ -43,7 +77,10 @@ end
 
 -- Gets an exp modifier based on the difference in the killer and killed players' levels
 function GetKillLevelModifier(killer_level, killed_level)
-    if killed_level == 0 and killer_level >= Exp.Level0ExpCutoffLevel then
+
+    local cutoff_level = GetMaxFromLevel(killer_level, Exp.LevelCutoffs)
+
+    if cutoff_level ~= nil and killed_level <= cutoff_level then
         return 0
     else
         return math.pow(10, (killed_level - killer_level) / Exp.Max_Level)

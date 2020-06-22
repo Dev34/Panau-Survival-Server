@@ -24,35 +24,47 @@ Events:Subscribe("Inventory/ToggleEquipped", function(args)
 
 end)
 
-local func = coroutine.wrap(function()
+ExplosivesDetectorPerks = 
+{
+    [57] = {[1] = 0.75},
+    [116] = {[1] = 0.5}
+}
 
-    while true do
+Timer.SetInterval(5000, function()
 
-        Timer.Sleep(1000)
+    for p in Server:GetPlayers() do
+        if IsValid(p) then
+            local item = GetEquippedItem("Explosives Detector", p)
+            if item then
 
-        for p in Server:GetPlayers() do
-            if IsValid(p) then
-                local item = GetEquippedItem("Explosives Detector", p)
-                if item then
+                local perks = p:GetValue("Perks")
+                local perk_modifier = 1
 
-                    item.durability = item.durability - dura_data.dura_per_sec
-                    Inventory.ModifyDurability({
-                        player = p,
-                        item = item
-                    })
-
-                    UpdateEquippedItem(p, "Explosives Detector", item)
-                    DecreaseDuraOfBattery(p)
-
-                    Timer.Sleep(1)
+                for perk_id, perk_data in pairs(ExplosivesDetectorPerks) do
+                    local choice = perks.unlocked_perks[perk_id]
+                    if choice and perk_data[choice] then
+                        perk_modifier = math.min(perk_modifier, perk_data[choice])
+                    end
                 end
+
+                item.durability = item.durability - math.min(1, math.floor(dura_data.dura_per_sec * perk_modifier))
+                Inventory.ModifyDurability({
+                    player = p,
+                    item = item
+                })
+
+                UpdateEquippedItem(p, "Explosives Detector", item)
+                DecreaseDuraOfBattery(p)
+
             end
         end
-
     end
-end)()
+
+end)
 
 function DecreaseDuraOfBattery(player)
+
+    if not IsValid(player) then return end
 
     local inv = Inventory.Get({player = player})
     if not inv then return end
@@ -81,36 +93,3 @@ function DecreaseDuraOfBattery(player)
     end
 
 end
-
-
-local func2 = coroutine.wrap(function()
-
-    while true do
-
-        for player in Server:GetPlayers() do
-
-            if IsValid(player) then
-                local parachuting_value = player:GetValue("ParachutingValue")
-
-                if parachuting_value and parachuting_value > 0 then
-                    local item = GetEquippedItem("Parachute", player)
-                    if not item then return end
-                    item.durability = item.durability - parachuting_value
-                    Inventory.ModifyDurability({
-                        player = player,
-                        item = item
-                    })
-                    UpdateEquippedItem(player, "Parachute", item)
-                    player:SetValue("ParachutingValue", 0)
-
-                end
-            end
-
-            Timer.Sleep(5)
-        end
-
-        Timer.Sleep(3000)
-
-    end
-
-end)()

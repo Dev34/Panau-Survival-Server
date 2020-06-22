@@ -5,6 +5,8 @@ function cVehicleManager:__init()
     self.owned_vehicles = {} -- My owned vehicles
     self.in_gas_station = false
 
+    self.vehicle_health_display_timer = Timer()
+
     self.text = 
     {
         size = 17,
@@ -18,7 +20,7 @@ function cVehicleManager:__init()
     self.block_actions = 
     {
         [Action.UseItem] = true,
-        [Action.ExitVehicle] = true,
+        --[Action.ExitVehicle] = true,
         [Action.GuiPDAToggleAOI] = true,
         [Action.PickupWithLeftHand] = true,
         [Action.PickupWithRightHand] = true,
@@ -66,7 +68,7 @@ function cVehicleManager:SyncOwnedVehicles(vehicles)
 end
 
 function cVehicleManager:LocalPlayerInput(args)
-
+    
     if self.block_actions[args.input] and not LocalPlayer:InVehicle() then
 
         if LocalPlayer:GetValue("LookingAtLootbox") then return false end
@@ -87,27 +89,35 @@ function cVehicleManager:LocalPlayerInput(args)
 
             if not data then return false end
 
+            if closest_vehicle:GetValue("Destroyed") then return false end
+
             if data.owner_steamid ~= tostring(LocalPlayer:GetSteamId())
-            and not IsAFriend(LocalPlayer, data.owner_steamid) then 
+            and not AreFriends(LocalPlayer, data.owner_steamid) then 
+
+                local ray = Physics:Raycast(Camera:GetPosition(), Camera:GetAngle() * Vector3.Forward, 0, 10)
+
+                if not ray.entity or ray.entity.__type ~= "Vehicle" or ray.entity ~= closest_vehicle then
+                    return false
+                end
+
                 if lockpicks < data.cost or (IsValid(closest_vehicle) and count_table(closest_vehicle:GetOccupants()) > 0) then
                     return false
                 end
             end
-        elseif args.input == Action.UseItem then
+
+        elseif args.input == Action.UseItem and not LocalPlayer:GetValue("StuntingVehicle") then
             return false -- Block healthpacks
         end
 
     end
 
     -- Block health packs
-    if args.input == Action.UseItem and not LocalPlayer:InVehicle() then
-        local ray = Physics:Raycast(Camera:GetPosition(), Camera:GetAngle() * Vector3.Forward, 0, 3)
+    if args.input == Action.UseItem and not LocalPlayer:InVehicle() and not LocalPlayer:GetValue("StuntingVehicle") then
+        local ray = Physics:Raycast(Camera:GetPosition(), Camera:GetAngle() * Vector3.Forward, 0, 7)
         if not IsValid(ray.entity) then
             return false
         end
     end
-
-    -- todo block grappling onto motorcycles
 
     -- Plane reverse
     local v = LocalPlayer:GetVehicle()
@@ -118,9 +128,9 @@ function cVehicleManager:LocalPlayerInput(args)
         and args.input == Action.PlaneDecTrust 
         and v:GetDriver() == LocalPlayer 
         and forwardvelocity < 5
-        and backwardvelocity > -2
+        and backwardvelocity > -1.5
         then
-            v:SetLinearVelocity(v:GetLinearVelocity() + v:GetAngle() * Vector3.Backward * 0.25)
+            v:SetLinearVelocity(v:GetLinearVelocity() + v:GetAngle() * Vector3.Backward * 0.2)
         end
     end
 
@@ -128,13 +138,86 @@ end
 
 function cVehicleManager:Render(args)
 
-    if LocalPlayer:InVehicle() then return end
+    if LocalPlayer:InVehicle() then
+        self:RenderCurrentVehicleData()
+        return
+    end
 
     local aim = LocalPlayer:GetAimTarget()
 
     if aim.entity and aim.entity.__type == "Vehicle" then
         self:RenderVehicleDataClassic(aim.entity)
     end
+
+end
+
+function cVehicleManager:RenderCurrentVehicleData()
+
+    if LocalPlayer:GetValue("InventoryOpen") then return end
+
+    self:DrawCurrentVehicleSpeed()
+    self:DrawCurrentVehicleHealth()
+
+end
+
+function cVehicleManager:DrawCurrentVehicleSpeed()
+
+    local v = LocalPlayer:GetVehicle()
+    local speed = math.round(-(-v:GetAngle() * v:GetLinearVelocity()).z)
+    local text = string.format("%.0f km/h", speed * 3.6)
+
+    if math.abs(speed) < 1 then return end
+
+    local size = Render.Size.y * 0.04
+    local margin = Vector2(-10, -10)
+    local text_size = Render:GetTextSize(text, size)
+    local pos = Vector2(Render.Size.x - text_size.x, Render.Size.y - text_size.y)
+    Render:DrawText(pos + margin + Vector2(2,2), text, Color.Black, size)
+    Render:DrawText(pos + margin, text, Color.White, size)
+
+end
+
+function cVehicleManager:DrawCurrentVehicleHealth()
+
+    local v = LocalPlayer:GetVehicle()
+    self.vehicle_health = v:GetHealth()
+
+    if self.vehicle_health ~= self.last_vehicle_health then
+        self.last_vehicle_health = self.vehicle_health
+        self.vehicle_health_display_timer:Restart()
+    end
+
+    if self.vehicle_health_display_timer:GetSeconds() < 5 then
+
+        -- Render vehicle health
+        local text = string.format("%.0f%%", self.vehicle_health * 100)
+
+        local alpha = 255 - 255 * math.min(1, self.vehicle_health_display_timer:GetSeconds() / 5)
+        local color = Color.FromHSV(120 * self.vehicle_health, 0.9, 0.9)
+        color.a = alpha
+        
+        local size = Render.Size.y * 0.04
+        local margin = Vector2(0, -10)
+        local text_size = Render:GetTextSize(text, size)
+        local pos = Vector2(Render.Size.x / 2 - text_size.x / 2, Render.Size.y - text_size.y)
+        Render:DrawText(pos + margin, text, color, size)
+
+    end
+
+end
+
+function cVehicleManager:InBoundingBox(v)
+
+    local bb1, bb2 = v:GetBoundingBox()
+    local local_pos = LocalPlayer:GetPosition()
+
+    if local_pos.x >= bb1.x and local_pos.x <= bb2.x
+    and local_pos.y >= bb1.y and local_pos.y <= bb2.y
+    and local_pos.z >= bb1.z and local_pos.z <= bb2.z then
+        return true
+    end
+
+    return local_pos:Distance(v:GetPosition()) < 5
 
 end
 
@@ -147,12 +230,14 @@ function cVehicleManager:RenderVehicleDataClassic(v)
 
     local pos = v:GetPosition() + Vector3(0,1,0)
     
-    if pos:Distance(LocalPlayer:GetPosition()) > 5 then return end
+    if not self:InBoundingBox(v) then return end
+
+    if v:GetValue("Destroyed") then return end
 
     local color = self.text.color
     local circle_color = self.text.locked_color
 
-    local friendly_vehicle = tostring(data.owner_steamid) == tostring(LocalPlayer:GetSteamId()) or IsAFriend(LocalPlayer, data.owner_steamid)
+    local friendly_vehicle = tostring(data.owner_steamid) == tostring(LocalPlayer:GetSteamId()) or AreFriends(LocalPlayer, data.owner_steamid)
     
     if friendly_vehicle then
         circle_color = self.text.unlocked_color
@@ -201,7 +286,24 @@ function cVehicleManager:SecondTick()
 
     for v in Client:GetVehicles() do
         near_vehicle = true
-        break
+
+        if IsValid(v) then
+
+            local data = v:GetValue("VehicleData")
+
+            if data then
+                -- Only allow friends or owner to sync destruction
+                if data.owner_steamid == tostring(LocalPlayer:GetSteamId())
+                or AreFriends(LocalPlayer, data.owner_steamid) then 
+
+                    if v:GetHealth() <= 0.2 and not v:GetValue("Remove") then
+                        Network:Send(var("Vehicles/VehicleDestroyed"):get(), {vehicle = v})
+                    end
+
+                end
+            end
+        end
+
     end
 
     if near_vehicle and not self.render and not self.lpi then

@@ -48,7 +48,7 @@ function cObjectPlacer:__init()
 end
 
 --[[
-    Starts placement of an objects. 
+    Starts placement of an object. 
 
     args (in table):
         model (string): model of the object you are placing
@@ -79,6 +79,9 @@ function cObjectPlacer:StartObjectPlacement(args)
 
     self.display_bb = args.display_bb == true
     self.angle_offset = args.angle ~= nil and args.angle or Angle()
+    self.offset = args.offset or Vector3()
+    self.place_entity = args.place_entity
+    self.bb_mod = args.bb_mod or 1
 
     self.disable_walls = args.disable_walls
     self.disable_ceil = args.disable_ceil
@@ -95,6 +98,59 @@ function cObjectPlacer:StartObjectPlacement(args)
 
 end
 
+function cObjectPlacer:CreateModel()
+    
+    local bb1, bb2 = self.object:GetBoundingBox()
+
+    local size = bb2 - bb1
+    local color = Color(255, 0, 0, 150)
+
+    offset = bb1 - self.object:GetPosition() - self.angle_offset * self.offset
+
+    local vertices = {}
+
+    table.insert(vertices, Vertex(offset, color))
+    table.insert(vertices, Vertex(offset + Vector3(0, size.y, 0), color))
+
+    table.insert(vertices, Vertex(offset + Vector3(size.x, 0, 0), color))
+    table.insert(vertices, Vertex(offset + Vector3(size.x, size.y, 0), color))
+
+    table.insert(vertices, Vertex(offset + Vector3(size.x, 0, size.z), color))
+    table.insert(vertices, Vertex(offset + size, color))
+
+    table.insert(vertices, Vertex(offset + Vector3(0, 0, size.z), color))
+    table.insert(vertices, Vertex(offset + Vector3(0, size.y, size.z), color))
+
+    table.insert(vertices, Vertex(offset, color))
+    table.insert(vertices, Vertex(offset + Vector3(size.x, 0, 0), color))
+    
+    table.insert(vertices, Vertex(offset + Vector3(size.x, 0, 0), color))
+    table.insert(vertices, Vertex(offset + Vector3(size.x, 0, size.z), color))
+    
+    table.insert(vertices, Vertex(offset + Vector3(size.x, 0, size.z), color))
+    table.insert(vertices, Vertex(offset + Vector3(0, 0, size.z), color))
+    
+    table.insert(vertices, Vertex(offset + Vector3(0, 0, size.z), color))
+    table.insert(vertices, Vertex(offset, color))
+    
+    table.insert(vertices, Vertex(offset + Vector3(0, size.y, 0), color))
+    table.insert(vertices, Vertex(offset + Vector3(size.x, size.y, 0), color))
+    
+    table.insert(vertices, Vertex(offset + Vector3(size.x, size.y, 0), color))
+    table.insert(vertices, Vertex(offset + size, color))
+    
+    table.insert(vertices, Vertex(offset + size, color))
+    table.insert(vertices, Vertex(offset + Vector3(0, size.y, size.z), color))
+    
+    table.insert(vertices, Vertex(offset + Vector3(0, size.y, size.z), color))
+    table.insert(vertices, Vertex(offset + Vector3(0, size.y, 0), color))
+
+    self.model = Model.Create(vertices)
+    self.model:SetTopology(Topology.LineList)
+
+    self.vertices = vertices
+end
+
 function cObjectPlacer:LocalPlayerInput(args)
     if self.blockedActions[args.input] then return false end
 end
@@ -104,13 +160,23 @@ function cObjectPlacer:Render(args)
     if not self.placing then return end
     if not IsValid(self.object) then return end
 
+    if not self.model then
+        self:CreateModel()
+    end
+
     local ray = Physics:Raycast(Camera:GetPosition(), Camera:GetAngle() * Vector3.Forward, 0, self.range)
+    self.forward_ray = ray
+    self.entity = ray.entity
 
     local in_range = ray.distance < self.range
     local can_place_here = in_range
 
     if ray.entity then
-        can_place_here = can_place_here and ray.entity.__type == "ClientStaticObject"
+        can_place_here = can_place_here and (ray.entity.__type == "ClientStaticObject" or self.place_entity)
+
+        if self.forward_ray.entity.__type == "ClientStaticObject" then
+            self.forward_ray.entity = nil
+        end
     end
 
     local ang = Angle.FromVectors(Vector3.Up, ray.normal) * Angle(self.rotation_yaw / 180 * math.pi, 0, 0) * self.angle_offset
@@ -125,12 +191,19 @@ function cObjectPlacer:Render(args)
         can_place_here = false
     end
 
+    for _, data in pairs(BlacklistedAreas) do
+        if data.pos:Distance(ray.position) < data.size then
+            can_place_here = false
+        end
+    end
+
     if in_range then
-        self.object:SetPosition(ray.position)
+        self.object:SetPosition(ray.position + ang * self.offset)
     else
         self.object:SetPosition(Vector3())
     end
 
+    can_place_here = self:CheckBoundingBox() and can_place_here
     self.can_place_here = can_place_here
     self:RenderText(can_place_here)
 
@@ -138,6 +211,31 @@ function cObjectPlacer:Render(args)
     Events:Fire("ObjectPlacerRender", {
         object = self.object
     })
+end
+
+function cObjectPlacer:CheckBoundingBox()
+
+    if self.vertices then
+        local angle = self.object:GetAngle()
+        local object_pos = self.object:GetPosition() + angle * Vector3(0, 0.25, 0)
+        for i = 1, #self.vertices, 2 do
+            local p1 = angle * self.vertices[i].position * 0.7 * self.bb_mod + object_pos
+            local p2 = angle * self.vertices[i+1].position * 0.7 * self.bb_mod + object_pos
+
+            local diff = p2 - p1
+            local len = diff:Length()
+
+            local ray = Physics:Raycast(p1, diff, 0, len)
+
+            if ray.distance < len or ray.position.y <= 200 then
+                return false
+            end
+        end
+    else
+        return false
+    end
+
+    return true
 end
 
 function cObjectPlacer:RenderText(can_place_here)
@@ -168,6 +266,13 @@ function cObjectPlacer:GameRender(args)
     if not self.placing then return end
     if not IsValid(self.object) then return end
 
+    if self.model and self.display_bb then
+        local t = Transform3():Translate(self.object:GetPosition()):Rotate(self.object:GetAngle())
+        Render:SetTransform(t)
+        self.model:Draw()
+        Render:ResetTransform()
+    end
+
     -- Fire an event in case other modules need to render other things, like a line for claymores
     Events:Fire("ObjectPlacerGameRender", {
         object = self.object
@@ -195,7 +300,9 @@ function cObjectPlacer:MouseUp(args)
             Events:Fire("build/PlaceObject", {
                 model = self.object:GetModel(),
                 position = self.object:GetPosition(),
-                angle = self.object:GetAngle()
+                angle = self.object:GetAngle(),
+                forward_ray = self.forward_ray,
+                entity = self.entity
             })
             self:StopObjectPlacement()
         end
@@ -222,6 +329,8 @@ function cObjectPlacer:StopObjectPlacement()
     end
 
     self.subs = {}
+    self.model = nil
+    self.vertices = nil
 end
 
 function cObjectPlacer:ModuleUnload()

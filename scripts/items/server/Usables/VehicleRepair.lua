@@ -22,7 +22,20 @@ Network:Subscribe("items/CompleteItemUsage", function(args, player)
             return
         end
 
+        if count_table(entity:GetOccupants()) > 0 then
+            Chat:Send(player, "This vehicle must be unoccupied!", Color.Red)
+            return
+        end
+
+
         entity:SetHealth(1)
+        entity:SetSpawnPosition(entity:GetPosition())
+        entity:SetSpawnAngle(entity:GetAngle())
+        entity:Respawn()
+
+        Timer.SetTimeout(2000, function()
+            entity:SetHealth(1)
+        end)
 
         Inventory.RemoveItem({
             item = player_iu.item,

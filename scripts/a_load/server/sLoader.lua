@@ -2,6 +2,7 @@ class 'sLoader'
 
 function sLoader:__init()
 
+    self.default_stream_distance = 1024
 
     Events:Subscribe("PlayerJoin", self, self.PlayerJoin)
     Events:Subscribe("PlayerDeath", self, self.PlayerDeath)
@@ -42,18 +43,17 @@ end
 
 function sLoader:TogglePlayerEnabled(player, enabled)
     if not IsValid(player) then return end
-    if not enabled and not player:GetValue("Loading") then
+    if not enabled then
 
-        player:SetValue("load/StreamDistance", player:GetStreamDistance())
         player:SetValue("Loading", true)
         player:SetStreamDistance(0)
         player:SetEnabled(false)
 
-    elseif enabled and player:GetValue("Loading") then
+    elseif enabled then
 
-        player:SetStreamDistance(player:GetValue("load/StreamDistance"))
-        player:SetValue("Loading", false)
         player:SetEnabled(true)
+        player:SetStreamDistance(self.default_stream_distance)
+        player:SetValue("Loading", false)
 
     end
 end

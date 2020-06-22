@@ -1,5 +1,6 @@
 class 'cSurvivalManager'
 
+local event = var("gsy.exit.settlement")
 
 function cSurvivalManager:__init()
 
@@ -14,8 +15,6 @@ function cSurvivalManager:__init()
     self:UpdateClimateZone()
 
     Events:Fire("loader/CompleteResource", {count = 2})
-
-    Network:Send("Survival/Ready")
 
     Network:Subscribe("Survival/Update", self, self.Update)
     Events:Subscribe("Render", self, self.Render)
@@ -41,7 +40,7 @@ function cSurvivalManager:LocalPlayerInput(args)
 end
 
 function cSurvivalManager:UpdateClimateZone()
-    Network:Send("Survival/UpdateClimateZone", {zone = LocalPlayer:GetClimateZone()})
+    --Network:Send("Survival/UpdateClimateZone", {zone = LocalPlayer:GetClimateZone()})
 end
 
 function cSurvivalManager:MinuteTick()
@@ -50,8 +49,8 @@ end
 
 function cSurvivalManager:Render(args)
 
+    Game:FireEvent(event:get())
     self.hud:Render(args)
-    --self.grapple_manager:Render(args)
 
 end
 

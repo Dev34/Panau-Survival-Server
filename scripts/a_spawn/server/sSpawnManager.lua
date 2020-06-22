@@ -5,30 +5,66 @@ class 'sSpawnManager'
 
 function sSpawnManager:__init()
 
-    self.timer = Timer()
-    
-    local func = coroutine.wrap(function()
-        for player in Server:GetPlayers() do
-            self:UpdatePlayerPositionMinuteTick(player)
-            Timer.Sleep(3)
-        end
-        Timer.Sleep(1000)
-    end)()
+	Events:Subscribe("PlayerJoin", self, self.PlayerJoin)
+	Events:Subscribe("PlayerDeath", self, self.PlayerDeath)
+	Events:Subscribe("PlayerSpawn", self, self.PlayerSpawn)
+	Events:Subscribe("PlayerQuit", self, self.PlayerQuit)
+    Events:Subscribe("ModuleUnload", self, self.ModuleUnload)
+    Events:Subscribe("SetHomePosition", self, self.SetHomePosition)
+    Events:Subscribe("PlayerChat", self, self.PlayerChat)
+
+	Network:Subscribe("EnterExitSafezone", self, self.EnterExitSafezone)
 
     for p in Server:GetPlayers() do
         if not p:GetValue("Loading") then
             p:SetValue("FirstSpawn", true)
         end
     end
+
+	Timer.SetInterval(1000 * 30, function()
+		
+		local seconds = Server:GetElapsedSeconds()
+
+        for player in Server:GetPlayers() do
+			if IsValid(player) then
+				
+				local last_update = player:GetValue("SpawnLastUpdate")
+
+				if last_update and seconds - last_update >= 60 then
+					self:UpdatePlayerPositionMinuteTick(player)
+					player:SetValue("SpawnLastUpdate", seconds)
+				end
+
+            end
+        end
+    end)
+
+end
+
+function sSpawnManager:PlayerChat(args)
+
+    if args.text == "/unsethome" then
+        self:SetHomePosition({
+            player = args.player,
+            pos = self:GetPositionInSafezone()
+        })
+        Chat:Send(args.player, "Set spawn point to the safezone.", Color.Yellow)
+    end
+
+end
+
+function sSpawnManager:SetHomePosition(args)
+
+    local steamid = tostring(args.player:GetSteamId().id)
+
+	local command = SQL:Command("UPDATE positions SET homeX = ?, homeY = ?, homeZ = ? WHERE steamID = (?)")
+	command:Bind(1, args.pos.x)
+	command:Bind(2, args.pos.y)
+	command:Bind(3, args.pos.z)
+	command:Bind(4, steamid)
+    command:Execute()
     
-
-	Events:Subscribe("PlayerJoin", self, self.PlayerJoin)
-	Events:Subscribe("PlayerDeath", self, self.PlayerDeath)
-	Events:Subscribe("PlayerSpawn", self, self.PlayerSpawn)
-	Events:Subscribe("PlayerQuit", self, self.PlayerQuit)
-    Events:Subscribe("ModuleUnload", self, self.ModuleUnload)
-
-	Network:Subscribe("EnterExitSafezone", self, self.EnterExitSafezone)
+    args.player:SetNetworkValue("HomePosition", args.pos)
 
 end
 
@@ -39,7 +75,7 @@ function sSpawnManager:ModuleUnload()
 end
 
 function sSpawnManager:EnterExitSafezone(args, player)
-	local in_sz = args.in_sz and player:GetPosition():Distance(config.safezone.position) < config.safezone.radius * 1.5
+	local in_sz = args.in_sz and player:GetPosition():Distance(config.safezone.position) < config.safezone.radius * 1.25
     player:SetNetworkValue("InSafezone", in_sz)
 
 	Events:Fire("EnterExitSafezone", {player = player, in_sz = in_sz})
@@ -74,6 +110,14 @@ function sSpawnManager:PlayerQuit(args)
     })
 
     self:UpdatePlayer(args.player)
+
+	local pos = args.player:GetPosition()
+
+	Events:Fire("Discord", {
+		channel = "Positions",
+		content = string.format("%s [%s] quit at X: %.4f Y: %.4f Z: %.4f",
+			args.player:GetName(), tostring(args.player:GetSteamId()), pos.x, pos.y, pos.z)
+	})
 
 end
 
@@ -150,7 +194,28 @@ function sSpawnManager:PlayerJoin(args)
     Events:Fire("Discord", {
         channel = "Chat",
         content = string.format("*%s [%s] joined the server.*", args.player:GetName(), args.player:GetSteamId())
-    })
+	})
+	
+	args.player:SetValue("SpawnLastUpdate", Server:GetElapsedSeconds())
+
+	local pos = args.player:GetPosition()
+	local s_pos = args.player:GetValue("SpawnPosition")
+	Events:Fire("Discord", {
+		channel = "Positions",
+		content = string.format("%s [%s] joined at X: %.4f Y: %.4f Z: %.4f\nSpawn pos: X: %.4f Y: %.4f Z: %.4f",
+			args.player:GetName(), tostring(args.player:GetSteamId()), pos.x, pos.y, pos.z, s_pos.x, s_pos.y, s_pos.z)
+	})
+
+	Timer.SetTimeout(15 * 1000, function()
+		if not IsValid(args.player) then return end
+		pos = args.player:GetPosition()
+
+		Events:Fire("Discord", {
+			channel = "Positions",
+			content = string.format("%s [%s] position 15s after joining X: %.4f Y: %.4f Z: %.4f\nSpawn pos: X: %.4f Y: %.4f Z: %.4f",
+				args.player:GetName(), tostring(args.player:GetSteamId()), pos.x, pos.y, pos.z, s_pos.x, s_pos.y, s_pos.z)
+		})
+	end)
 
 end
 
@@ -183,17 +248,49 @@ end
 function sSpawnManager:PlayerSpawn(args)
     args.player:SetValue("Spawn/KilledRecently", false)
     
-    if args.player:GetValue("FirstSpawn") then
-        args.player:SetPosition(self:GetRespawnPosition(args.player))
-    else
-        args.player:SetPosition(args.player:GetValue("SpawnPosition"))
-    end
+	if args.player:GetValue("SecondLifeActive") then return end
+	
+	local target_pos
 
-    self:EnterExitSafezone({
-        in_sz = true
-    }, args.player)
+    if args.player:GetValue("FirstSpawn") then
+        target_pos = self:GetRespawnPosition(args.player)
+    else
+        target_pos = args.player:GetValue("SpawnPosition")
+	end
+	
+	args.player:SetPosition(target_pos)
 
     args.player:SetValue("FirstSpawn", true)
+    args.player:SetHealth(1)
+
+	local pos = args.player:GetPosition()
+	local s_pos = args.player:GetValue("SpawnPosition")
+
+	Events:Fire("Discord", {
+		channel = "Positions",
+		content = string.format("%s [%s] spawned at X: %.4f Y: %.4f Z: %.4f\nSpawn pos: X: %.4f Y: %.4f Z: %.4f",
+			args.player:GetName(), tostring(args.player:GetSteamId()), pos.x, pos.y, pos.z, target_pos.x, target_pos.y, target_pos.z)
+	})
+
+	Timer.SetTimeout(10 * 1000, function()
+		if not IsValid(args.player) then return end
+		pos = args.player:GetPosition()
+
+		Events:Fire("Discord", {
+			channel = "Positions",
+			content = string.format("%s [%s] position 10s after spawning X: %.4f Y: %.4f Z: %.4f\nSpawn pos: X: %.4f Y: %.4f Z: %.4f",
+				args.player:GetName(), tostring(args.player:GetSteamId()), pos.x, pos.y, pos.z, target_pos.x, target_pos.y, target_pos.z)
+		})
+
+		if pos:Distance(target_pos) > 1000 then
+			Events:Fire("Discord", {
+				channel = "Errors",
+				content = string.format("%s [%s] was more than 1km away from their spawn position 10s after spawning",
+					args.player:GetName(), tostring(args.player:GetSteamId()))
+			})
+		end
+	end)
+
 
 	return false
 end

@@ -6,7 +6,7 @@ function getter_setter(instance, get_set_name)
     end
 
     local name = ""
-    local words = split(get_set_name, "_")
+    local words = get_set_name:split("_")
     for k, word in ipairs(words) do
         name = name .. firstCharacterToUpper(word)
     end

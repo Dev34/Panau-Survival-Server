@@ -7,7 +7,9 @@ function sClaymores:__init()
     self.claymores = {} -- Active claymores, indexed by claymore id
     self.claymore_cells = {} -- Active claymores, organized by cell x, y, then claymore id
 
-    self.sz_config = SharedObject.GetByName("SafezoneConfig"):GetValues()
+    self.network_subs = {}
+
+    Console:Subscribe("clearbadclaymores", self, self.ClearBadClaymores)
 
     Network:Subscribe("items/CancelClaymorePlacement", self, self.CancelClaymorePlacement)
     Network:Subscribe("items/PlaceClaymore", self, self.FinishClaymorePlacement)
@@ -19,6 +21,71 @@ function sClaymores:__init()
     Events:Subscribe("Cells/PlayerCellUpdate" .. tostring(ItemsConfig.usables.Claymore.cell_size), self, self.PlayerCellUpdate)
     Events:Subscribe("ClientModuleLoad", self, self.ClientModuleLoad)
     Events:Subscribe("items/ItemExplode", self, self.ItemExplode)
+    Events:Subscribe("ItemUse/CancelUsage", self, self.ItemUseCancelUsage)
+end
+
+function sClaymores:ItemUseCancelUsage(args)
+
+    if self.network_subs[tostring(args.player:GetSteamId())] then
+        Network:Unsubscribe(self.network_subs[tostring(args.player:GetSteamId())])
+        self.network_subs[tostring(args.player:GetSteamId())] = nil
+    end
+
+    local player_iu = args.player:GetValue("ItemUse")
+
+    if not player_iu or player_iu.item.name ~= "Claymore" then return end
+
+    Chat:Send(args.player, "Placing claymore failed!", Color.Red)
+
+end
+
+function sClaymores:ClearBadClaymores()
+
+    Thread(function()
+        print("Clearing bad claymores...")
+        for id, claymore in pairs(self.claymores) do
+
+            local waiting = true
+
+            local sub = nil
+            sub = Events:Subscribe("IsTooCloseToLootCheck"..tostring(id), function(args)
+            
+                Events:Unsubscribe(sub)
+                sub = nil
+
+                if args.too_close then
+
+                    local cmd = SQL:Command("DELETE FROM claymores where id = ?")
+                    cmd:Bind(1, id)
+                    cmd:Execute()
+
+                    -- Remove mine
+                    local cell = claymore:GetCell()
+                    self.claymore_cells[cell.x][cell.y][args.id] = nil
+                    self.claymores[args.id] = nil
+                    claymore:Remove()
+                    
+                end
+
+                waiting = false
+
+            end)
+
+            args = {}
+
+            args.position = claymore.position
+            args.id = tostring(id)
+            Events:Fire("CheckIsTooCloseToLoot", args)
+
+            while waiting do
+                Timer.Sleep(10)
+            end
+
+        end
+
+        print("All bad claymores cleared.")
+    end)
+    
 end
 
 function sClaymores:ItemExplode(args)
@@ -60,10 +127,20 @@ function sClaymores:DestroyClaymore(args, player)
     self.claymores[args.id] = nil
     claymore:Remove(player)
 
+    local exp_enabled = true
+
+    if claymore.place_time and Server:GetElapsedSeconds() - claymore.place_time < 60 * 60 then
+        exp_enabled = false
+    end
+
     Events:Fire("items/ItemExplode", {
         position = claymore.position,
         radius = 10,
-        player = player
+        player = player,
+        owner_id = claymore.owner_id,
+        type = DamageEntity.Claymore,
+        no_detonation_source = args.no_detonation_source,
+        exp_enabled = exp_enabled
     })
 
 end
@@ -155,7 +232,10 @@ function sClaymores:StepOnClaymore(args, player)
         Events:Fire("items/ItemExplode", {
             position = claymore.position,
             radius = 10,
-            player = player
+            player = player,
+            owner_id = claymore.owner_id,
+            type = DamageEntity.Claymore,
+            no_detonation_source = true
         })
     end
 
@@ -194,8 +274,7 @@ function sClaymores:LoadAllClaymores()
             local split = claymore_data.position:split(",")
             local pos = Vector3(tonumber(split[1]), tonumber(split[2]), tonumber(split[3]))
 
-            local split2 = claymore_data.angle:split(",")
-            local angle = Angle(tonumber(split2[1]), tonumber(split2[2]), tonumber(split2[3]))
+            local angle = self:DeserializeAngle(claymore_data.angle)
 
             self:AddClaymore({
                 id = claymore_data.id,
@@ -209,13 +288,22 @@ function sClaymores:LoadAllClaymores()
 
 end
 
+function sClaymores:SerializeAngle(ang)
+    return math.round(ang.x, 5) .. "," .. math.round(ang.y, 5) .. "," .. math.round(ang.z, 5) .. "," .. math.round(ang.w, 5)
+end
+
+function sClaymores:DeserializeAngle(ang)
+    local split = ang:split(",")
+    return Angle(tonumber(split[1]), tonumber(split[2]), tonumber(split[3]), tonumber(split[4]) or 0)
+end
+
 function sClaymores:PlaceClaymore(position, angle, player)
 
     local steamID = tostring(player:GetSteamId())
     local cmd = SQL:Command("INSERT INTO claymores (steamID, position, angle) VALUES (?, ?, ?)")
     cmd:Bind(1, steamID)
     cmd:Bind(2, tostring(position))
-    cmd:Bind(3, tostring(angle))
+    cmd:Bind(3, self:SerializeAngle(angle))
     cmd:Execute()
 
 	cmd = SQL:Query("SELECT last_insert_rowid() as id FROM claymores")
@@ -226,12 +314,14 @@ function sClaymores:PlaceClaymore(position, angle, player)
         return
     end
     
-    self:AddClaymore({
+    local claymore = self:AddClaymore({
         id = result[1].id,
         owner_id = steamID,
         position = position,
         angle = angle
-    }):SyncNearby(player)
+    })
+    claymore:SyncNearby(player)
+    claymore.place_time = Server:GetElapsedSeconds()
 
     Network:Send(player, "items/ClaymorePlaceSound", {position = position})
     Network:SendNearby(player, "items/ClaymorePlaceSound", {position = position})
@@ -242,26 +332,57 @@ function sClaymores:TryPlaceClaymore(args, player)
 
     local player_iu = player:GetValue("ClaymoreUsingItem")
 
-    if player_iu.item and ItemsConfig.usables[player_iu.item.name]
-        and player_iu.item.name == "Claymore" then
+    if not player_iu then return end
 
-        Inventory.RemoveItem({
-            item = player_iu.item,
-            index = player_iu.index,
-            player = player
-        })
+    player_iu.delayed = true
+    sItemUse:InventoryUseItem(player_iu)
 
-        -- Now actually place the claymore
-        self:PlaceClaymore(args.position, args.angle, player)
+    player:SetValue("ClaymoreUsingItem", nil)
 
+    if self.network_subs[tostring(args.player:GetSteamId())] then
+        Network:Unsubscribe(self.network_subs[tostring(args.player:GetSteamId())])
+        self.network_subs[tostring(args.player:GetSteamId())] = nil
     end
+    
+    local sub
+    sub = Network:Subscribe("items/CompleteItemUsage", function(_, _player)
+    
+        if player ~= _player then return end
 
+        local player_iu = player:GetValue("ItemUse")
+
+        if player_iu.item and ItemsConfig.usables[player_iu.item.name] and player_iu.using and player_iu.completed and 
+        player_iu.item.name == "Claymore" then
+
+            if player:GetPosition():Distance(args.position) > 10 then
+                Chat:Send(player, "Placing claymore failed!", Color.Red)
+                return
+            end
+
+            Inventory.RemoveItem({
+                item = player_iu.item,
+                index = player_iu.index,
+                player = player
+            })
+
+            -- Now actually place the claymore
+            self:PlaceClaymore(args.position, args.angle, player)
+
+        end
+
+        Network:Unsubscribe(sub)
+        self.network_subs[tostring(player:GetSteamId())] = nil
+
+    end)
+
+    self.network_subs[tostring(player:GetSteamId())] = sub
 
 end
 
 function sClaymores:UseItem(args)
 
     if args.item.name ~= "Claymore" then return end
+    if args.player:InVehicle() then return end
 
     if args.player:GetValue("StuntingVehicle") then
         Chat:Send(args.player, "You cannot use this item while stunting on a vehicle!", Color.Red)
@@ -292,14 +413,49 @@ function sClaymores:FinishClaymorePlacement(args, player)
         return
     end
 
+    if not self.sz_config then
+        self.sz_config = SharedObject.GetByName("SafezoneConfig"):GetValues()
+    end
+
+    local BlacklistedAreas = SharedObject.GetByName("BlacklistedAreas"):GetValues().blacklist
+
+    for _, area in pairs(BlacklistedAreas) do
+        if player:GetPosition():Distance(area.pos) < area.size then
+            Chat:Send(player, "You cannot place claymores here!", Color.Red)
+            return
+        end
+    end
+
+    if args.model and DisabledPlacementModels[args.model] then
+        Chat:Send(player, "Placing claymore failed!", Color.Red)
+        return
+    end
+
     -- If they are within sz radius * 2, we don't let them place that close
     if player:GetPosition():Distance(self.sz_config.safezone.position) < self.sz_config.safezone.radius * 2 then
         Chat:Send(player, "Cannot place claymores while near the safezone!", Color.Red)
         return
     end
 
+    local sub = nil
+    sub = Events:Subscribe("IsTooCloseToLootCheck"..tostring(player:GetSteamId()), function(args)
+    
+        Events:Unsubscribe(sub)
+        sub = nil
 
-    self:TryPlaceClaymore(args, player)
+        if args.too_close then
+
+            Chat:Send(player, "Cannot place claymores too close to loot!", Color.Red)
+            return
+
+        end
+
+        self:TryPlaceClaymore(args, args.player)
+        
+    end)
+
+    args.player = player
+    Events:Fire("CheckIsTooCloseToLoot", args)
 
 end
 

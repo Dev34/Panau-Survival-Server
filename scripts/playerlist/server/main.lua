@@ -4,17 +4,14 @@ function ListHandler:__init()
 	self.PingList = {}
     self.LastTick = 0
     
-    local func = coroutine.wrap(function()
-        while true do
-            for player in Server:GetPlayers() do
-                self.PingList[tostring(player:GetSteamId())] = {
-                    ping = player:GetPing(), 
-                    level = player:GetValue("Exp") and player:GetValue("Exp").level or "..."
-                }
-            end
-            Timer.Sleep(4000)
+    Timer.SetInterval(4000, function()
+        for player in Server:GetPlayers() do
+            self.PingList[tostring(player:GetSteamId())] = {
+                ping = player:GetPing(), 
+                level = player:GetValue("Exp") and player:GetValue("Exp").level or "..."
+            }
         end
-    end)()
+    end)
 
 	Network:Subscribe("SendPingList", self, self.SendPingList)
 	Events:Subscribe("PlayerQuit", self, self.PlayerQuit)
