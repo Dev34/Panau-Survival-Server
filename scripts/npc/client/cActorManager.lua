@@ -33,19 +33,22 @@ function ActorManager:SyncActors(actors_data)
         end
     end
 
-    for actor_id, actor_data in pairs(actors_data.stale_actors) do
-        local actor_profile_instance = self.actors[actor_id]
-        actor_profile_instance:GetActor():RemoveAllBehaviors()
-        assert(actor_profile_instance ~= nil)
-        actor_profile_instance:Remove()
-        
-        print("Removed actor " .. tostring(actor_id))
+    if actors_data.stale_actors then
+        for actor_id, actor_data in pairs(actors_data.stale_actors) do
+            local actor_profile_instance = self.actors[actor_id]
+            actor_profile_instance:GetActor():RemoveAllBehaviors()
+            assert(actor_profile_instance ~= nil)
+            actor_profile_instance:Remove()
+            
+            print("Removed actor " .. tostring(actor_id))
 
-        self.actors[actor_id] = nil
+            self.actors[actor_id] = nil
+        end
     end
 end
 
 function ActorManager:RenderDebug()
+    --[[
     local base_actor
     local actor_pos
     for actor_id, actor_profile_instance in pairs(self.actors) do
@@ -58,6 +61,10 @@ function ActorManager:RenderDebug()
         Render:FillCircle(Vector3.Zero, 1.75, Color.Chocolate)
         Render:ResetTransform()
 
+        actor_profile_instance:RenderDebug()
+    end
+    ]]
+    for actor_id, actor_profile_instance in pairs(self.actors) do
         actor_profile_instance:RenderDebug()
     end
 end
