@@ -26,7 +26,7 @@ function PathNavigation:StartPath()
     end
 
     self.check_finished_interval = Timer.SetInterval(250, function()
-        if self and self.path_finished_callback then
+        if self and self.path and self.path_finished_callback then
             if self:GetPathProgress() >= 1.00 then
                 self.path_finished_callback(self.path_finished_callback_instance)
                 Timer.Clear(self.check_finished_interval)
@@ -39,7 +39,7 @@ function PathNavigation:StartPath()
     end)
 
     self.node_reached_interval = Timer.SetInterval(200, function()
-        if self and self.active and self.node_reached_callback then
+        if self and self.active and self.path and self.node_reached_callback then
             -- TODO: find a less expensive way to compute current_node_index using computed data?
             local current_node_index = self:GetCurrentNodeIndex()
             if current_node_index > self.last_current_node_index then
