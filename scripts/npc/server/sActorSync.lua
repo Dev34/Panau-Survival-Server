@@ -39,6 +39,39 @@ function ActorSync:GetActiveActorsInCells(cells)
     return actors
 end
 
+-- a force sync to every client in same or adjacent cells
+function ActorSync:AnnounceActor(actor_profile_instance)
+    print("Entered AnnounceActor")
+    local actor_data = {}
+    actor_data.new_actors = {}
+    actor_data.new_actors[actor_profile_instance.actor:GetActorId()] = {
+        actor_sync_data = actor_profile_instance:GetActor():GetSyncData(),
+        profile_sync_data = actor_profile_instance:GetSyncData()
+    }
+    local actor_cell = actor_profile_instance.actor:GetCell()
+    local actor_cell_x, actor_cell_y = actor_cell.x, actor_cell.y
+    local players_receiving = {}
+
+    local min, max = math.min, math.max
+    local player_cell
+    for player in Server:GetPlayers() do
+        player_cell = GetCell(player:GetPosition(), ActorSync.cell_size)
+        local minX, maxX = min(actor_cell_x, player_cell.x), max(actor_cell_x, player_cell.x)
+        local minY, maxY = min(actor_cell_y, player_cell.y), max(actor_cell_y, player_cell.y)
+        
+        if maxX - minX <= 1 and maxY - minY <= 1 then
+            if not actor_profile_instance.actor:IsPlayerStreamedIn(player) then
+                actor_profile_instance.actor:StreamInPlayer(player)
+                table.insert(players_receiving, player)
+            end
+        end
+    end
+
+    if count_table(players_receiving) > 0 then
+        Network:SendToPlayers(players_receiving, "npc/SyncActors", actor_data)
+    end
+end
+
 function ActorSync:SyncActors()
 
 end
