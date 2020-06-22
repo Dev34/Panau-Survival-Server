@@ -43,7 +43,8 @@ function Patroller:PathFinished()
     self.actor.behaviors.NavigatePathBehavior:StartPath()
     if count_table(self.actor.streamed_players) > 0 then
         Network:SendToPlayers(self.actor:GetStreamedPlayersSequential(), "npc/NextPath" .. tostring(self.actor:GetActorId()), {
-            path = self.path:GetJsonCompatibleData()
+            path = self.path:GetJsonCompatibleData(),
+            path_speed_multiplier = self.path_speed_multiplier
         })
     end
 end
