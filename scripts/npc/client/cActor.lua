@@ -9,6 +9,7 @@ function Actor:__init()
     getter_setter(self, "host")
     getter_setter(self, "model_id")
     getter_setter(self, "behaviors")
+    self.client_actor_spawned_timer = Timer()
     self.behaviors = {}
 end
 
@@ -45,6 +46,14 @@ function Actor:UseBehavior(actor_profile_instance, behavior_class)
     local behavior_instance = behavior_class(actor_profile_instance)
     self.behaviors[behavior_class.name] = behavior_instance
     behavior_instance:SetActive(true)
+end
+
+function Actor:Respawned()
+    self.client_actor_spawned_timer:Restart()
+end
+
+function Actor:GetClientActorSpawnedTime()
+    return self.client_actor_spawned_timer:GetSeconds()
 end
 
 function Actor:RemoveAllBehaviors()
