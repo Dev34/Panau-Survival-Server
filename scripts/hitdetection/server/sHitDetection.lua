@@ -272,24 +272,7 @@ function sHitDetection:Respawn(args, player)
 end
 
 function sHitDetection:CheckPendingHits()
-    
-    Timer.SetInterval(10, function()
-        if count_table(self.pending_hits) > 0 then
-            local data = table.remove(self.pending_hits)
 
-            for _, v in pairs(data.pending) do
-
-                if v.type == WeaponHitType.Explosive then
-                    self:ExplosionHit(v, data.player)
-                else
-                    self:BulletHit(v, data.player)
-                end
-
-            end
-        end
-    end)
-
-    
     Timer.SetInterval(500, function()
         if count_table(self.pending_armor_aggregation) > 0 then
 
@@ -472,7 +455,7 @@ function sHitDetection:SecondTick()
 
         end
 
-        if IsValid(p) and p:GetValue("InCombat") then
+        if IsValid(p) and p:GetValue("InCombat") and self.players_in_combat[tostring(p:GetSteamId())] then
             local combat_time = self.players_in_combat[tostring(p:GetSteamId())].time
 
             if Server:GetElapsedSeconds() - combat_time >= self.combat_log_time then
@@ -535,7 +518,7 @@ function sHitDetection:VehicleExplosionHit(args, player)
                 local damage = original_damage
 
                 if not data.in_fov then
-                    damage = damage * WeaponDamage.FOVDamageModifier
+                    damage = damage * WeaponDamage.FOVDamageModifierVehicle
                 end
 
                 local armor = WeaponDamage.vehicle_armors[v:GetModelId()] or 1
@@ -556,7 +539,7 @@ function sHitDetection:VehicleExplosionHit(args, player)
                     content = msg
                 })
 
-                v:SetLinearVelocity(v:GetLinearVelocity() + (data.hit_dir * radius * explosive_data.knockback * (armor * 0.15)))
+                v:SetLinearVelocity(v:GetLinearVelocity() + (data.hit_dir * radius * explosive_data.knockback * (armor * 0.1)))
 
                 sub = Events:Unsubscribe(sub)
 
@@ -607,8 +590,10 @@ function sHitDetection:HitDetectionSyncExplosion(args, player)
         local original_damage = explosive_data.damage * percent_modifier
         local damage = original_damage
 
-        if not args.in_fov then
+        if not args.in_fov and not player:InVehicle() then
             damage = damage * WeaponDamage.FOVDamageModifier
+        elseif not args.in_fov and player:InVehicle() then
+            damage = damage * WeaponDamage.FOVDamageModifierInVehicle
         end
 
         damage = damage * WeaponDamage:GetArmorMod(player, hit_type, damage, original_damage) * perk_mods[1]

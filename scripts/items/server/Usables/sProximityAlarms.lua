@@ -29,8 +29,6 @@ function sProxAlarms:__init()
     Events:Subscribe("ClientModuleLoad", self, self.ClientModuleLoad)
     Events:Subscribe("PlayerQuit", self, self.PlayerQuit)
 
-    Events:Subscribe("items/ItemExplode", self, self.ItemExplode)
-
     Timer.SetInterval(1000 * 60 * 60, function()
         self:LowerBatteryDurabilities()
     end)
@@ -184,6 +182,8 @@ function sProxAlarms:DestroyProx(args, player)
 
     player = player or args.player
 
+    if not IsValid(player) then return end
+
     Events:Fire("SendPlayerPersistentMessage", {
         steam_id = alarm.stash.owner_id,
         message = string.format("Your proximity alarm was destroyed by %s %s", player:GetName(), WorldToMapString(alarm.position)),
@@ -196,7 +196,11 @@ function sProxAlarms:DestroyProx(args, player)
     -- self.recent_ids
     local give_exp = true
 
-    if self.recent_ids[alarm.stash.owner_id] and Server:GetElapsedSeconds() - self.recent_ids[alarm.stash.owner_id] < 60 * 60 then
+    if self.recent_ids[alarm.stash.owner_id] and Server:GetElapsedSeconds() - self.recent_ids[alarm.stash.owner_id] < 60 * 60 * 24 * 3 then
+        give_exp = false
+    end
+
+    if count_table(alarm.contents) == 0 then
         give_exp = false
     end
 
@@ -332,7 +336,7 @@ function sProxAlarms:FinishProxPlacement(args, player)
         end
     end
 
-    if args.model and DisabledPlacementModels[args.model] then
+    if args.collision and DisabledPlacementCollisions[args.collision] then
         Chat:Send(player, "Placing proximity alarm failed!", Color.Red)
         return
     end

@@ -2,7 +2,7 @@ class 'cC4s'
 
 function cC4s:__init(args)
 
-    self.near_stashes = {} -- [cso id] = stash id
+    self.near_stashes = {} -- [cso id] = lootbox uid
     self.c4s = {} -- [wno id] = cC4() 
 
     self.placing_c4 = false
@@ -12,11 +12,17 @@ function cC4s:__init(args)
     Network:Subscribe(var("items/StartC4Placement"):get(), self, self.StartC4Placement)
     Network:Subscribe(var("items/C4Explode"):get(), self, self.C4Explode)
 
+    Network:Subscribe("items/PlayC4TriggerAnimation", self, self.PlayC4TriggerAnimation)
+
     Events:Subscribe("WorldNetworkObjectCreate", self, self.WorldNetworkObjectCreate)
     Events:Subscribe("WorldNetworkObjectDestroy", self, self.WorldNetworkObjectDestroy)
 
     Events:Subscribe(var("Inventory/LootboxCreate"):get(), self, self.LootboxCreate)
     Events:Subscribe(var("Inventory/LootboxRemove"):get(), self, self.LootboxRemove)
+end
+
+function cC4s:PlayC4TriggerAnimation()
+    LocalPlayer:SetLeftArmState(AnimationState.LaSTriggerBoom)
 end
 
 function cC4s:LootboxCreate(args)
@@ -61,7 +67,8 @@ function cC4s:StartC4Placement()
         model = 'f1t05bomb01.eez/key019_01-z.lod',
         display_bb = true,
         offset = Vector3(0, 0.05, 0),
-        place_entity = true
+        place_entity = true,
+        range = 6
     })
 
     self.place_subs = 
@@ -101,7 +108,7 @@ function cC4s:PlaceObject(args)
         end
     end
 
-    local ray = Physics:Raycast(Camera:GetPosition(), Camera:GetAngle() * Vector3.Forward, 0, 5)
+    local ray = Physics:Raycast(Camera:GetPosition(), Camera:GetAngle() * Vector3.Forward, 0, 7)
 
     local send_data = {
         position = args.position,

@@ -38,10 +38,13 @@ function sVehicleManager:__init()
     Network:Subscribe("Vehicles/DeleteVehicle", self, self.PlayerDeleteVehicle)
     Network:Subscribe("Vehicles/TransferVehicle", self, self.TransferVehicle)
 
+    Network:Subscribe("Vehicles/EnterGasStation", self, self.EnterGasStation)
+    Network:Subscribe("Vehicles/ExitGasStation", self, self.ExitGasStation)
+
     Network:Subscribe("Vehicles/VehicleDestroyed", self, self.VehicleDestroyedClient)
 
-    Timer.SetInterval(500, function()
-        self:Tick500()
+    Timer.SetInterval(1000, function()
+        self:Tick1000()
     end)
 
 
@@ -84,6 +87,11 @@ function sVehicleManager:PlayerChat(args)
     if split[1] == "/spawnv" and split[2] then
 
         local model_id = tonumber(split[2])
+
+        if not vCosts[model_id] then
+            Chat:Send(args.player, "Vehicle not supported.", Color.Red)
+            return
+        end
         
         local spawn_args = {}
         spawn_args.position = args.player:GetPosition()
@@ -101,7 +109,7 @@ function sVehicleManager:PlayerChat(args)
         spawn_args.health = health
         local vehicle_data = self:GenerateVehicleData(spawn_args)
 
-        if split[3] then
+        if tonumber(split[3]) and tonumber(split[3]) >= 0 then
             vehicle_data.cost = tonumber(split[3])
         end
             
@@ -317,8 +325,57 @@ function sVehicleManager:CheckForDestroyedVehicles()
 
 end
 
-function sVehicleManager:Tick500()
-    -- Every 500 ms, heal vehicles that are at gas stations
+function sVehicleManager:EnterGasStation(args, player)
+
+    if not args.index then return end
+
+    local station_pos = gasStations[args.index]
+
+    if not station_pos then return end
+
+    if not player:InVehicle() then return end
+
+    local dist = station_pos:Distance(player:GetVehicle():GetPosition())
+    if dist < config.gas_station_radius then
+        player:GetVehicle():SetValue("GasStationIndex", args.index)
+        player:GetVehicle():SetValue("InGasStation", true)
+    end
+
+end
+
+function sVehicleManager:ExitGasStation(args, player)
+
+    if not player:GetVehicle() then return end
+
+    player:GetVehicle():SetValue("GasStationIndex", nil)
+    player:GetVehicle():SetValue("InGasStation", nil)
+
+end
+
+function sVehicleManager:Tick1000()
+    -- Every 1000 ms, heal vehicles that are at gas stations
+
+    for id, vehicle in pairs(self.owned_vehicles) do
+
+        if IsValid(vehicle) 
+        and vehicle:GetValue("InGasStation") 
+        and vehicle:GetHealth() < 1 then
+
+            local speed = math.abs(math.floor(vehicle:GetLinearVelocity():Length()))
+            local index = vehicle:GetValue("GasStationIndex")
+
+            if vehicle:GetPosition():Distance(gasStations[index]) > config.gas_station_radius then
+                vehicle:SetValue("InGasStation", nil)
+                vehicle:SetValue("GasStationIndex", nil)
+            elseif speed < 1 then
+                local hp = math.min(1, vehicle:GetHealth() + config.gas_station_repair_per_second)
+                vehicle:SetHealth(hp)
+            end
+
+        end
+
+    end
+
 end
 
 function sVehicleManager:MinuteTick()
@@ -365,6 +422,9 @@ function sVehicleManager:PlayerQuit(args)
 end
 
 function sVehicleManager:PlayerExitVehicle(args)
+
+    args.vehicle:SetStreamDistance(500)
+
     local vehicle_data = args.vehicle:GetValue("VehicleData")
     if not vehicle_data then return end
 
@@ -532,6 +592,8 @@ end
 
 
 function sVehicleManager:PlayerEnterVehicle(args)
+
+    args.vehicle:SetStreamDistance(1000)
 
     local data = args.vehicle:GetValue("VehicleData")
     args.data = data
@@ -931,8 +993,15 @@ function sVehicleManager:GetVehicleFromType(type)
 
     -- Now get template, if it exists
     if config.templates[args.model_id] then
-        if random() <= config.templates[args.model_id].chance then
-            args.template = table.randomvalue(config.templates[args.model_id].templates)
+        local sum = 0
+        local rand = random()
+
+        for template, chance in pairs(config.templates[args.model_id]) do
+            sum = sum + chance
+            if rand <= sum then
+                args.template = template
+                break
+            end
         end
     end
 

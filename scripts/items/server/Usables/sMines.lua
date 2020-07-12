@@ -89,12 +89,16 @@ end
 function sMines:DestroyMine(args, player)
     if not args.id or not self.mines[args.id] then return end
 
+    sItemExplodeManager:Add(function()
+    
     local mine = self.mines[args.id]
 
-    if mine.exploded then return end
+    if not mine or mine.exploded then return end
 
-    Network:Send(player, "items/MineDestroy", {position = mine.position, id = mine.id, owner_id = mine.owner_id})
-    Network:SendNearby(player, "items/MineDestroy", {position = mine.position, id = mine.id, owner_id = mine.owner_id})
+    if IsValid(player) then
+        Network:Send(player, "items/MineDestroy", {position = mine.position, id = mine.id, owner_id = mine.owner_id})
+        Network:SendNearby(player, "items/MineDestroy", {position = mine.position, id = mine.id, owner_id = mine.owner_id})
+    end
 
     local cmd = SQL:Command("DELETE FROM mines where id = ?")
     cmd:Bind(1, args.id)
@@ -121,6 +125,8 @@ function sMines:DestroyMine(args, player)
         no_detonation_source = args.no_detonation_source,
         exp_enabled = exp_enabled
     })
+
+    end)
 
 end
 
@@ -370,7 +376,7 @@ function sMines:CompleteItemUsage(args, player)
             self.sz_config = SharedObject.GetByName("SafezoneConfig"):GetValues()
         end
 
-        if args.ray.model and DisabledPlacementModels[args.ray.model] then
+        if args.ray.collision and DisabledPlacementCollisions[args.ray.collision] then
             Chat:Send(player, "Placing mine failed!", Color.Red)
             return
         end
@@ -385,6 +391,15 @@ function sMines:CompleteItemUsage(args, player)
 
         for _, area in pairs(BlacklistedAreas) do
             if player:GetPosition():Distance(area.pos) < area.size then
+                Chat:Send(player, "You cannot place mines here!", Color.Red)
+                return
+            end
+        end
+
+        local ModelChangeAreas = SharedObject.GetByName("ModelLocations"):GetValues()
+
+        for _, area in pairs(ModelChangeAreas) do
+            if player:GetPosition():Distance(area.pos) < 10 then
                 Chat:Send(player, "You cannot place mines here!", Color.Red)
                 return
             end

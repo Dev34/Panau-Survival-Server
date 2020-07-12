@@ -149,6 +149,8 @@ end
 function sC4s:DestroyC4(args, player)
     if not args.id or not self.wnos[args.id] then return end
 
+    sItemExplodeManager:Add(function()
+    
     local c4 = self.wnos[args.id]
 
     if not c4 then return end
@@ -187,17 +189,17 @@ function sC4s:DestroyC4(args, player)
         player = player,
         owner_id = owner_id,
         type = DamageEntity.C4,
-        detonation_source_id = args.detonation_source_id or (player and tostring(player:GetSteamId() or nil))
+        detonation_source_id = args.detonation_source_id or (IsValid(player) and tostring(player:GetSteamId() or nil))
     })
+
+    end)
 
 end
 
 function sC4s:UseItem(args)
 
     if args.item.name ~= "C4" then return end
-    if args.player:InVehicle() then return end
 
-    -- TOOD: check if already placed. If placed, then explode
     if args.item.custom_data.id then
         -- Already placed, trigger it
 
@@ -205,7 +207,9 @@ function sC4s:UseItem(args)
             id = args.item.custom_data.id
         }, args.player)
 
-    else
+        Network:Send(args.player, "items/PlayC4TriggerAnimation")
+
+    elseif not args.player:InVehicle() then
 
         Inventory.OperationBlock({player = args.player, change = 1}) -- Block inventory operations until they finish placing or cancel
         args.player:SetValue("C4UsingItem", args)
@@ -265,7 +269,7 @@ function sC4s:TryPlaceC4(args, player)
         local sub
         sub = Network:Subscribe("items/CompleteItemUsage", function(_, _player)
         
-            if player ~= _player then return end
+            if not IsValid(player) or not IsValid(_player) or player ~= _player then return end
 
             local player_iu = player:GetValue("ItemUse")
 
@@ -339,6 +343,15 @@ function sC4s:FinishC4Placement(args, player)
 
     for _, area in pairs(BlacklistedAreas) do
         if player:GetPosition():Distance(area.pos) < area.size then
+            Chat:Send(player, "You cannot place C4 here!", Color.Red)
+            return
+        end
+    end
+
+    local ModelChangeAreas = SharedObject.GetByName("ModelLocations"):GetValues()
+
+    for _, area in pairs(ModelChangeAreas) do
+        if player:GetPosition():Distance(area.pos) < 10 then
             Chat:Send(player, "You cannot place C4 here!", Color.Red)
             return
         end

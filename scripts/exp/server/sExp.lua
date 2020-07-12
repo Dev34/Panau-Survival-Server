@@ -160,6 +160,8 @@ function sExp:PlayerKilled(args)
 
     -- Subtract exp from player who died
     local exp_data = args.player:GetValue("Exp")
+    if not exp_data then return end
+    
     local exp_lost = GetExpLostOnDeath(exp_data.level)
     exp_data.combat_exp = math.max(0, exp_data.combat_exp - exp_lost)
     exp_data.explore_exp = math.max(0, exp_data.explore_exp - exp_lost)
@@ -176,6 +178,8 @@ end
 
 function sExp:AwardExpToKillerOnKill(args)
 
+    if AreFriends(args.player, args.killer) then return end
+
     local player_id = tostring(args.player:GetSteamId())
     local killer_id = args.killer
 
@@ -187,6 +191,15 @@ function sExp:AwardExpToKillerOnKill(args)
 
     if args.player:GetValue("RespawnerLastSet") and 
     Server:GetElapsedSeconds() - args.player:GetValue("RespawnerLastSet") < 60 * 60 then return end
+
+    local recent_unfriends = args.player:GetValue("RecentUnfriends")
+
+    if recent_unfriends[args.killer] then 
+        if Server:GetElapsedSeconds() - recent_unfriends[args.killer] < Exp.UnfriendTime then return end
+        recent_unfriends[args.killer] = nil
+        args.player:SetValue("RecentUnfriends", recent_unfriends)
+    end
+
 
     local killed_exp = args.player:GetValue("Exp")
     

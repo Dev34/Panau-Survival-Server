@@ -8,7 +8,7 @@ ItemsConfig =
         ["Proximity Alarm"] = {use_time = 4, delay_use = true, range = 10, battery_dura_per_hour = 100}, -- 10% per hour
         ["Bandages"] = {restore_hp = 0.2, use_time = 3},
         ["Healthpack"] = {restore_hp = 1.0, use_time = 10},
-        ["Woet"] = {use_time = 1, range = 5},
+        ["Woet"] = {use_time = 2, range = 10},
         ["Vehicle Repair"] = {use_time = 5, range = 5},
         ["Vehicle Guard"] = {use_time = 3, range = 5},
         ["BackTrack"] = {use_time = 3},
@@ -19,6 +19,7 @@ ItemsConfig =
         ["Master Hacker"] = {use_time = 5},
         ["Ping"] = {max_distance = 5000, max_height = 4000},
         ["Combat Ping"] = {max_distance = 550, max_height = 200},
+        ["EMP"] = {range = 400, disable_time = 30, use_time = 10},
     },
     airstrikes = 
     {
@@ -147,10 +148,11 @@ AirstrikePerks =
 }
 
 
-DisabledPlacementModels = 
+DisabledPlacementCollisions = 
 {
-    ["geo.cbb.eez/go152-a.lod"] = true,
-    ["38x11.nl/go231-a.lod"] = true,
-    ["f1t16.garbage_can.eez/go225-a.lod"] = true,
-    ["areaset03.blz/go161-a1_dst.lod"] = true
+    ["km05.hotelbuilding01.flz/key030_01_lod1-n_col.pfx"] = true,
+    ["38x11.nlz/go231_lod1-a_col.pfx"] = true,
+    ["f1t16.garbage_can.eez/go225_lod1-a_col.pfx"] = true,
+    ["areaset03.blz/go161_lod1-a1_dst_col.pfx"] = true,
+    ["km02.towercomplex.flz/key013_01_lod1-g_col.pfx"] = true
 }

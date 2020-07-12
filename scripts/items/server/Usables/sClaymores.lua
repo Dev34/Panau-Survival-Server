@@ -110,12 +110,16 @@ end
 function sClaymores:DestroyClaymore(args, player)
     if not args.id or not self.claymores[args.id] then return end
 
+    sItemExplodeManager:Add(function()
+    
     local claymore = self.claymores[args.id]
 
-    if claymore.exploded then return end
+    if not claymore or claymore.exploded then return end
 
-    Network:Send(player, "items/ClaymoreExplode", {position = claymore.position, id = claymore.id, owner_id = claymore.owner_id})
-    Network:SendNearby(player, "items/ClaymoreExplode", {position = claymore.position, id = claymore.id, owner_id = claymore.owner_id})
+    if IsValid(player) then
+        Network:Send(player, "items/ClaymoreExplode", {position = claymore.position, id = claymore.id, owner_id = claymore.owner_id})
+        Network:SendNearby(player, "items/ClaymoreExplode", {position = claymore.position, id = claymore.id, owner_id = claymore.owner_id})
+    end
 
     local cmd = SQL:Command("DELETE FROM claymores where id = ?")
     cmd:Bind(1, args.id)
@@ -142,6 +146,8 @@ function sClaymores:DestroyClaymore(args, player)
         no_detonation_source = args.no_detonation_source,
         exp_enabled = exp_enabled
     })
+
+    end)
 
 end
 
@@ -229,7 +235,7 @@ function sClaymores:StepOnClaymore(args, player)
         self.claymore_cells[cell.x][cell.y][id] = nil
         self.claymores[id] = nil
         
-        Events:Fire("items/ItemExplode", {
+        Events:Fire("Items/ItemExplodeRequest", {
             position = claymore.position,
             radius = 10,
             player = player,
@@ -426,7 +432,7 @@ function sClaymores:FinishClaymorePlacement(args, player)
         end
     end
 
-    if args.model and DisabledPlacementModels[args.model] then
+    if args.collision and DisabledPlacementCollisions[args.collision] then
         Chat:Send(player, "Placing claymore failed!", Color.Red)
         return
     end
@@ -435,6 +441,15 @@ function sClaymores:FinishClaymorePlacement(args, player)
     if player:GetPosition():Distance(self.sz_config.safezone.position) < self.sz_config.safezone.radius * 2 then
         Chat:Send(player, "Cannot place claymores while near the safezone!", Color.Red)
         return
+    end
+
+    local ModelChangeAreas = SharedObject.GetByName("ModelLocations"):GetValues()
+
+    for _, area in pairs(ModelChangeAreas) do
+        if player:GetPosition():Distance(area.pos) < 10 then
+            Chat:Send(player, "You cannot place claymores here!", Color.Red)
+            return
+        end
     end
 
     local sub = nil
