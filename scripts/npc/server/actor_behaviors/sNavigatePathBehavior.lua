@@ -4,6 +4,7 @@ NavigatePathBehavior.name = "NavigatePathBehavior"
 function NavigatePathBehavior:__init(actor_profile_instance)
     self.actor_profile_instance = actor_profile_instance
     getter_setter(self, "active")
+    getter_setter(self, "paused")
     getter_setter(self, "path")
     getter_setter(self, "is_pathing")
     getter_setter(self, "speed_multiplier")
@@ -34,4 +35,16 @@ end
 
 function NavigatePathBehavior:PathFinishedCallback()
     self.actor_profile_instance.actor:FireBehaviorEvent("PathFinished")
+end
+
+function NavigatePathBehavior:Pause()
+    self.paused = true
+    self.path_navigation:Pause()
+    self.actor_profile_instance.actor:AddStateEvent("PausePath", {})
+end
+
+function NavigatePathBehavior:Resume()
+    self.paused = false
+    self.path_navigation:Resume()
+    self.actor_profile_instance.actor:AddStateEvent("ResumePath", {})
 end
