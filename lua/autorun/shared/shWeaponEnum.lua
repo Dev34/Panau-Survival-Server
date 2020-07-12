@@ -37,7 +37,7 @@ function WeaponEnum:__init()
         [self.V_MachineGun] = "Vehicle Machine Gun"
     }
 
-    --] li""t is on https://wiki.jc-mp.com/Lua/Shared/Weapon
+    -- list is on https://wiki.jc-mp.com/Lua/Shared/Weapon
     self.enum_to_weapon_id_mapping = {
         [self.MachineGun] = 28,
         [self.Handgun] = 2,
@@ -50,6 +50,53 @@ function WeaponEnum:__init()
         [self.Sniper] = 14,
         [self.SawnOffShotgun] = 6,
         [self.Shotgun] = 13
+    }
+
+    self.weapons_info = {
+        [self.MachineGun] = {
+            fire_mode = 1,
+            npc_fire_rate = 250
+        },
+        [self.Handgun] = {
+            fire_mode = 0,
+            npc_fire_rate = 400
+        },
+        [self.Assault] = {
+            fire_mode = 1,
+            npc_fire_rate = 250
+        },
+        [self.BubbleGun] = {
+            fire_mode = 1,
+            npc_fire_rate = 250
+        },
+        [self.GrenadeLauncher] = {
+            fire_mode = 0,
+            npc_fire_rate = 1500
+        },
+        [self.Revolver] = {
+            fire_mode = 0,
+            npc_fire_rate = 800
+        },
+        [self.RocketLauncher] = {
+            fire_mode = 0,
+            npc_fire_rate = 3000
+        },
+        [self.SMG] = {
+            fire_mode = 1,
+            npc_fire_rate = 250
+        },
+        [self.Sniper] = {
+            fire_mode = 0,
+            npc_fire_rate = 3000
+        },
+        [self.SawnOffShotgun] = {
+            fire_mode = 0,
+            npc_fire_rate = 1600
+        },
+        [self.Shotgun] = {
+            fire_mode = 0,
+            npc_fire_rate = 1600
+        }
     }
 
     self.weapon_id_to_enum_mapping = {}
@@ -70,5 +117,9 @@ function WeaponEnum:GetByWeaponId(weapon_id)
     return self.weapon_id_to_enum_mapping[weapon_id]
 end
 
+function WeaponEnum:GetWeaponInfo(weapon_enum)
+    assert(self.weapons_info[weapon_enum] ~= nil)
+    return self.weapons_info[weapon_enum]
+end
 
 WeaponEnum = WeaponEnum()
