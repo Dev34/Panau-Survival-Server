@@ -2,6 +2,7 @@ class "PathNavigation"
 
 function PathNavigation:__init()
     getter_setter(self, "active")
+    getter_setter(self, "paused")
     getter_setter(self, "path")
     getter_setter(self, "speed_multiplier")
     getter_setter(self, "initial_progress")
@@ -10,11 +11,10 @@ function PathNavigation:__init()
     getter_setter(self, "node_reached_callback")
     getter_setter(self, "node_reached_callback_instance")
     self.active = false
+    self.paused = false
     self.initial_progress = 0
     self.has_computed_path = false
     self.last_current_node_index = 0
-
-    print("Created PathNavigation instance")
 end
 
 function PathNavigation:StartPath()
@@ -58,6 +58,10 @@ function PathNavigation:GetPosition()
         self:ComputePath()
     end
 
+    if self.paused then
+        return self.paused_position
+    end
+
     local path_positions = self.path:GetPositions()
     local progress_percentage = self:GetPathProgress()
     if progress_percentage >= 1.00 then
@@ -94,6 +98,10 @@ end
 
 -- returns 0.0 -> 1.0 path progress
 function PathNavigation:GetPathProgress()
+    if self.paused then
+        return self.initial_progress
+    end
+
     if not self.has_computed_path then
         self:ComputePath()
     end
@@ -103,9 +111,25 @@ function PathNavigation:GetPathProgress()
     return life_time_ms / self.lifetime_ms
 end
 
+function PathNavigation:Pause()
+    self.paused_position = self:GetPosition()
+    self.paused_node_index = self:GetCurrentNodeIndex()
+    self.initial_progress = self:GetPathProgress()
+    self.paused = true
+end
+
+function PathNavigation:Resume()
+    self.life_timer:Restart()
+    self.paused = false
+end
+
 function PathNavigation:GetCurrentNodeIndex()
     if not self.has_computed_path then
         self:ComputePath()
+    end
+
+    if self.paused then
+        return self.paused_node_index
     end
 
     local progress_percentage = self:GetPathProgress()
