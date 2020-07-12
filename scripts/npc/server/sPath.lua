@@ -38,6 +38,10 @@ function Path:GetJsonCompatibleData()
     return json_data
 end
 
+function Path:GetLastNodePosition()
+    return self.positions[#self.positions]
+end
+
 function Path:GetReversedCopy()
     local new_path = Path()
     local reversed_path_positions = reversed_copy(self.positions)
