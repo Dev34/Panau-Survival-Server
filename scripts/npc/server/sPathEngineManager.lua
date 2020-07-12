@@ -18,7 +18,7 @@ function PathEngineManager:DeclarePathServers()
     self:CreatePathServer({
         ip = '51.161.9.77',
         port = 7780,
-        aggregation_delay = 2000
+        aggregation_delay = 500
     })
 end
 
