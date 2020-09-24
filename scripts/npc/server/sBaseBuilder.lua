@@ -10,7 +10,7 @@ end
 function BaseBuilder:ModuleLoad(args)
     Thread(function() 
         Timer.Sleep(3000)
-        self:LoadDebugBase("testbase")
+        self:LoadDebugBase("base1")
     end)
 end
 
