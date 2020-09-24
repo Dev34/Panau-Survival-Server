@@ -1,6 +1,6 @@
 class "Actor"
 
-function Actor:__init()
+function Actor:__init(actor_id)
     getter_setter(self, "active")
     getter_setter(self, "actor_id")
     getter_setter(self, "actor_profile_enum")
@@ -11,9 +11,24 @@ function Actor:__init()
     getter_setter(self, "behaviors")
     getter_setter(self, "actor_profile_instance")
     getter_setter(self, "removed")
+    getter_setter(self, "weapon_enum")
+    getter_setter(self, "model_id")
+
+    self:SetActorId(actor_id)
+    
     
     self.behaviors = {}
     self.streamed_players = {}
+    self.state_event_callbacks = {}
+    self.queued_state_events = {}
+end
+
+function Actor:Initialize()
+    self:DeclareNetworkSubscriptions()
+end
+
+function Actor:DeclareNetworkSubscriptions()
+    self.state_events_sub = Network:Subscribe("npc/StateEventsFromClient" .. tostring(self.actor_id), self, self.StateEventsFromClient)
 end
 
 function Actor:StreamInPlayer(player)
@@ -52,6 +67,8 @@ function Actor:GetSyncData()
     sync_data.position = self.position
     sync_data.cell = self.cell
     sync_data.host = self.host
+    sync_data.weapon_enum = self.weapon_enum
+    sync_data.model_id = self.model_id
 
     return sync_data
 end
@@ -76,4 +93,52 @@ function Actor:FireBehaviorEvent(event_name, args)
     if self.actor_profile_instance[event_name] then
         self.actor_profile_instance[event_name](self.actor_profile_instance, args)
     end
+end
+
+function Actor:AddStateEvent(state_event_name, data)
+    table.insert(self.queued_state_events, {
+        event_name = state_event_name,
+        data = data
+    })
+end
+
+function Actor:SyncStateEventsIfNecessary()
+    if count_table(self.queued_state_events) > 0 and count_table(self.streamed_players) > 0 then
+        local streamed_players_seq = self:GetStreamedPlayersSequential()
+        Network:SendToPlayers(streamed_players_seq, "npc/SyncStateEvents" .. tostring(self.actor_id), {
+            state_events = Copy(self.queued_state_events)
+        })
+    end
+    self.queued_state_events = {}
+end
+
+function Actor:StateEventsFromClient(args, player)
+    for _, state_event_data in ipairs(args.state_events) do
+        local callbacks = self.state_event_callbacks[state_event_data.event_name]
+        if callbacks then
+            for _, callback_data in ipairs(callbacks) do
+                local callback_instance, callback = callback_data.callback_instance, callback_data.callback
+                if callback_instance then
+                    callback(callback_instance, player, state_event_data.data)
+                else
+                    callback(player, state_event_data.data)
+                end
+            end
+        end
+    end
+end
+
+function Actor:SubscribeToStateEvent(state_event_name, callback_instance, callback)
+    if not self.state_event_callbacks[state_event_name] then
+        self.state_event_callbacks[state_event_name] = {}
+    end
+    table.insert(self.state_event_callbacks[state_event_name], {
+        callback_instance = callback_instance,
+        callback = callback
+    })
+end
+
+-- TODO: implement server-side actor removal/cleanup
+function Actor:Remove()
+    Network:Unsubscribe(self.state_events_sub)
 end
