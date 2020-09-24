@@ -5,7 +5,8 @@ function BaseManager:__init()
 end
 
 function BaseManager:LoadBases()
-    self:LoadBase("testbase")
+    --self:LoadBase("testbase")
+    self:LoadBase("base1")
 end
 
 function BaseManager:LoadBase(base_name)
