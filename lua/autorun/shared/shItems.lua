@@ -171,7 +171,7 @@ Items =
     {
         name = "Car Paint",
         category = "Survival",
-        stacklimit = 5,
+        stacklimit = 10,
         can_use = true,
 		can_stack = true
     },
@@ -677,6 +677,16 @@ Items =
         stacklimit = 3,
         can_use = true,
         max_held = 3, -- Maximum number of these that can be in the inventory at once
+    },
+    {
+        name = "Loot Bag",
+        category = "Survival",
+        stacklimit = 10
+    },
+    {
+        name = "Money Bag",
+        category = "Survival",
+        stacklimit = 10
     }
 }
 
