@@ -67,6 +67,34 @@ function random_table_key(t)
     return keys[math.random(#keys)]
 end
 
+-- omitted keys is a table where key is index and value can be anything except false or 0
+function random_weighted_table_value(weighted_table, omitted_keys)
+    if not omitted_keys then
+        omitted_keys = {}
+    end
+
+    local sum = 0
+    for key, weight in pairs(weighted_table) do
+        if not omitted_keys[key] then
+            sum = sum + weight
+        end
+    end
+
+    local rand = math.random() * sum
+    local found
+    for key, weight in pairs(weighted_table) do
+        if not omitted_keys[key] then
+            rand = rand - weight
+            if rand < 0 then
+                found = key
+                break
+            end
+        end
+    end
+
+    return found
+end
+
 function table.compare(tbl1, tbl2)
 	for k, v in pairs(tbl1) do
 		if tbl2[k] ~= v then
