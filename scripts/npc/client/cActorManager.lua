@@ -21,6 +21,7 @@ function ActorManager:SyncActors(actors_data)
             self.actors[actor_id] = actor_profile_instance
 
             actor:InitializeFromSyncData(actor_data.actor_sync_data)
+            actor:SetActorProfileInstance(actor_profile_instance)
             actor_profile_instance:InitializeFromSyncData(actor_data.profile_sync_data)
 
             if actor:GetActive() then
@@ -37,6 +38,7 @@ function ActorManager:SyncActors(actors_data)
         for actor_id, actor_data in pairs(actors_data.stale_actors) do
             local actor_profile_instance = self.actors[actor_id]
             actor_profile_instance:GetActor():RemoveAllBehaviors()
+            actor_profile_instance:GetActor():Remove()
             assert(actor_profile_instance ~= nil)
             actor_profile_instance:Remove()
             
@@ -72,6 +74,7 @@ end
 function ActorManager:ModuleUnload()
     for actor_id, actor_profile_instance in pairs(self.actors) do
         actor_profile_instance:GetActor():RemoveAllBehaviors()
+        actor_profile_instance:GetActor():Remove()
         actor_profile_instance:Remove()
     end
 end
