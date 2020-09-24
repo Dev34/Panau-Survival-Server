@@ -4,13 +4,20 @@ function Patroller:__init()
     getter_setter(self, "actor")
     getter_setter(self, "path")
     self.actor = Actor()
-    self.actor:SetActorProfileEnum(ActorProfileEnum.Patroller)
-    self.actor:SetModelId(ActorProfileEnum:GetModelId(ActorProfileEnum.Patroller))
 end
 
 function Patroller:InitializeBehaviors()
     -- Configure behaviors
+    self.actor:UseBehavior(self, DetectLocalPlayerHitsBehavior)
     self.actor:UseBehavior(self, FollowPathBehavior2)
+    self.actor:UseBehavior(self, ShootTargetBehavior)
+    self.actor:UseBehavior(self, ChasePlayerBehavior)
+
+    -- TODO: try to move these to the behavior classes since it's not actor profile specific?
+    -- unless we want the flexibility to disable these parts of behaviors? dont think so
+    self.actor:SubscribeToStateEvent("ShootTarget", self.actor.behaviors.ShootTargetBehavior, self.actor.behaviors.ShootTargetBehavior.ShootTarget)
+    self.actor:SubscribeToStateEvent("PausePath", self.actor.behaviors.FollowPathBehavior2, self.actor.behaviors.FollowPathBehavior2.PausePath)
+    self.actor:SubscribeToStateEvent("ResumePath", self.actor.behaviors.FollowPathBehavior2, self.actor.behaviors.FollowPathBehavior2.ResumePath)
 end
 
 function Patroller:GetSyncData()
@@ -31,11 +38,34 @@ function Patroller:Spawn()
     local next_path_node = self.path.positions[self.actor.behaviors.FollowPathBehavior2.current_node_index + 1]
     local spawn_angle = next_path_node and Angle(Angle.FromVectors(Vector3.Forward, next_path_node - spawn_node).yaw, 0, 0) or Angle()
     local spawn_position = self.actor.behaviors.FollowPathBehavior2:GetPosition()
-    self.client_actor = ClientActor.Create(1, {
+    self.client_actor = ClientActor.Create(self, {
         model_id = self.actor:GetModelId(),
         position = spawn_position,
         angle = spawn_angle
     })
+
+    Timer.SetTimeout(1500, function()
+        if self.actor and self.actor.active and self.client_actor and IsValid(self.client_actor) and self.actor.weapon_enum then
+            self.client_actor:GiveWeapon(1, Weapon(WeaponEnum:GetWeaponId(self.actor.weapon_enum), 999999, 999999))
+        end
+    end)
+    self.actor:Respawned()
+end
+
+-- LocalPlayer shot the actor
+function Patroller:LocalPlayerHit()
+    Network:Send("npc/PlayerAttackNPC" .. tostring(self.actor.actor_id), {
+        line_of_sight = self:HasLineOfSightOnLocalPlayer()
+    })
+end
+
+function Patroller:HasLineOfSightOnLocalPlayer()
+    if not IsValid(self.client_actor) then return false end
+    local client_actor_pos = self.client_actor:GetPosition() + Vector3(0, 2.3, 0)
+    local localplayer_pos = LocalPlayer:GetBonePosition("ragdoll_Head")
+    
+	local ray = Physics:Raycast(client_actor_pos, Angle.FromVectors(Vector3.Forward, localplayer_pos - client_actor_pos) * Vector3.Forward, 0, 850, false)
+	return (ray.entity and ray.entity.__type == "LocalPlayer")
 end
 
 function Patroller:Respawn(pos, ang)
@@ -45,7 +75,7 @@ function Patroller:Respawn(pos, ang)
     print("self:")
     print(self)
     print(self.actor)
-    self.client_actor = ClientActor.Create(1, {
+    self.client_actor = ClientActor.Create(self, {
         model_id = self.actor:GetModelId(),
         position = pos,
         angle = ang
