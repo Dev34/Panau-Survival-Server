@@ -1,6 +1,10 @@
 class "Path"
+Path.id_counter = 0
 
 function Path:__init()
+    getter_setter(self, "id")
+    Path.id_counter = Path.id_counter + 1
+    self:SetId(Path.id_counter)
     getter_setter(self, "name") -- adds Path:GetName and Path:SetName and defines instance.name
     getter_setter(self, "positions") -- adds Path:GetPositions and Path:SetPositions and defines instance.positions
 end

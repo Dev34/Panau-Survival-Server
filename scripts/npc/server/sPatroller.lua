@@ -51,6 +51,7 @@ end
 
 
 -- "PathAcquired" behavior event handler from ChasePlayerBehavior
+-- we also call this manually within this class instance
 function Patroller:PathAcquired(path)
     if self.removed then return end
     if not self.announced then
