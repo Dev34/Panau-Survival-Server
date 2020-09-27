@@ -4,7 +4,6 @@ function Actor:__init(actor_id)
     getter_setter(self, "active")
     getter_setter(self, "actor_id")
     getter_setter(self, "actor_profile_enum")
-    getter_setter(self, "position")
     getter_setter(self, "cell")
     getter_setter(self, "host")
     getter_setter(self, "streamed_players")
@@ -136,6 +135,21 @@ function Actor:SubscribeToStateEvent(state_event_name, callback_instance, callba
         callback_instance = callback_instance,
         callback = callback
     })
+end
+
+function Actor:GetPosition()
+    if not self.position then
+        print("Called Actor:GetPosition() but not position has been set on the actor yet")
+    end
+    return self.position
+end
+
+function Actor:SetPosition(pos)
+    self.position = pos
+    -- update the cell based on the new position
+    if pos then
+        self:SetCell(GetCell(self.position, ActorSync.cell_size))
+    end
 end
 
 -- TODO: implement server-side actor removal/cleanup

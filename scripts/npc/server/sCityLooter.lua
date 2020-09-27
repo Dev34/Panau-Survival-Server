@@ -58,10 +58,7 @@ function CityLooter:GetSyncData()
 end
 
 function CityLooter:Initialize(data)
-    self.actor.position = Copy(data.position)
-    if self.actor.position then
-        self.actor.cell = GetCell(self.actor.position, ActorSync.cell_size)
-    end
+    self.actor:SetPosition(Copy(data.position))
     
     self.actor.behaviors.RoamBehavior:FindNextPath() -- self.actor.position should be up-to-date before calling FindNextPath
 
@@ -82,8 +79,7 @@ function CityLooter:PathAcquired(path)
 
     self.path = Path()
     self.path:SetPositions(path)
-    self.actor.position = Copy(path[1])
-    self.actor.cell = GetCell(self.actor.position, ActorSync.cell_size)
+    self.actor:SetPosition(Copy(path[1]))
     self.actor.behaviors.NavigatePathBehavior:SetPath(self.path)
     self.actor.behaviors.NavigatePathBehavior:StartPath()
 
@@ -98,8 +94,7 @@ end
 -- "PathFinished" behavior event handler
 -- could be moved to a separate behavior, but it's not much code
 function CityLooter:PathFinished()
-    self.actor.position = Copy(self.path.positions[#self.path.positions])
-    self.actor.cell = GetCell(self.actor.position, ActorSync.cell_size)
+    self.actor:SetPosition(Copy(self.path.positions[#self.path.positions]))
 
     if self:IsChasing() then
         self.actor.behaviors.ShootTargetBehavior:StopShootingTarget(false)
@@ -178,8 +173,7 @@ function CityLooter:IsChasing()
 end
 
 function CityLooter:UpdateStoredPosition()
-    self.actor.position = self.actor.behaviors.NavigatePathBehavior:GetPosition()
-    self.actor.cell = GetCell(self.actor.position, ActorSync.cell_size)
+    self.actor:SetPosition(self.actor.behaviors.NavigatePathBehavior:GetPosition())
 end
 
 function CityLooter:Remove()

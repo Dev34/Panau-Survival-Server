@@ -24,7 +24,7 @@ function Patroller:__init(actor_id)
     self.actor:UseBehavior(self, ShootTargetBehavior)
     self.actor:UseBehavior(self, ChasePlayerBehavior)
     self.actor.behaviors.NavigatePathBehavior:SetSpeedMultiplier(self.path_speed_multiplier)
-    self.actor.behaviors.ChasePlayerBehavior:SetMaxChaseTime(45000) -- max time spent pathing towards the target before we get the timeout event (in milliseconds)
+    self.actor.behaviors.ChasePlayerBehavior:SetMaxChaseTime(10000) -- max time spent pathing towards the target before we get the timeout event (in milliseconds)
 end
 
 function Patroller:DeclareNetworkSubscriptions()
@@ -44,10 +44,7 @@ end
 function Patroller:InitializeFromSpawnPoint(spawn_point)
     self.spawn_point = spawn_point
     self.path = spawn_point:GetPath()
-    self.actor.position = Copy(self.path:GetPositions()[1])
-    if self.actor.position then
-        self.actor.cell = GetCell(self.actor.position, ActorSync.cell_size)
-    end
+    self.actor:SetPosition(Copy(self.path:GetPositions()[1]))
     self.actor.behaviors.NavigatePathBehavior:SetPath(self.path)
     self.actor.behaviors.NavigatePathBehavior:StartPath()
 end
@@ -63,8 +60,7 @@ function Patroller:PathAcquired(path)
 
     self.path = Path()
     self.path:SetPositions(path)
-    self.actor.position = Copy(path[1])
-    self.actor.cell = GetCell(self.actor.position, ActorSync.cell_size)
+    self.actor:SetPosition(Copy(path[1]))
     self.actor.behaviors.NavigatePathBehavior:SetPath(self.path)
     self.actor.behaviors.NavigatePathBehavior:StartPath()
 
@@ -81,8 +77,7 @@ end
 -- currently 
 function Patroller:PathFinished()
     print("Entered PathFinished handler")
-    self.actor.position = Copy(self.path.positions[#self.path.positions])
-    self.actor.cell = GetCell(self.actor.position, ActorSync.cell_size)
+    self.actor:SetPosition(Copy(self.path.positions[#self.path.positions]))
 
     if self:IsChasing() then
         self:PathFinishedWhileChasing()
@@ -124,6 +119,8 @@ function Patroller:PlayerAttacked(args, player)
     if should_acquire_target then
         self:NewTarget(player)
         self.actor.behaviors.NavigatePathBehavior:Pause()
+        self:UpdateStoredPosition()
+        self:UpdatePathPositionBeforeChase()
         if args.line_of_sight then
             self.actor.behaviors.ChasePlayerBehavior:StopChasing()
             self.actor.behaviors.ShootTargetBehavior:ShootTarget(self.target)
@@ -151,7 +148,6 @@ function Patroller:StoppedShootingTarget() -- happens when LoS is lost after min
         --self.actor.behaviors.RoamBehavior:FindNextPath()
     end
     
-    Chat:Broadcast("Entered StoppedShootingTarget", Color.Red)
     self.actor:SyncStateEventsIfNecessary()
 end
 
@@ -170,8 +166,20 @@ function Patroller:ChasingTimedOut()
     --self.actor.behaviors.RoamBehavior:FindNextPath() -- self.actor.position should be up-to-date before calling FindNextPath
     self.actor.behaviors.NavigatePathBehavior:Pause()
     self.actor.behaviors.ChasePlayerBehavior:StopChasing()
+    -- find a path back to the position on the patrol path before the actor started chasing
+    PathEngineManager:GetFootPath(self.patrol_path_position_before_chase, self.actor.behaviors.NavigatePathBehavior:GetPosition(), self.ReturnToPatrolPathEngineCallback, self)
 
     self.actor:SyncStateEventsIfNecessary()
+end
+
+-- callback from PathEngine after we request a path back to the patrol path
+function Patroller:ReturnToPatrolPathEngineCallback(data)
+    if data.error then
+        -- cant find a path back to the last patrol path position
+        -- TODO: handle this somehow (teleport back to patrol path after 1 minute of roaming?)
+    else
+        self:PathAcquired(data.path)
+    end
 end
 
 function Patroller:IsChasing()
@@ -179,8 +187,13 @@ function Patroller:IsChasing()
 end
 
 function Patroller:UpdateStoredPosition()
-    self.actor.position = self.actor.behaviors.NavigatePathBehavior:GetPosition()
-    self.actor.cell = GetCell(self.actor.position, ActorSync.cell_size)
+    self.actor:SetPosition(self.actor.behaviors.NavigatePathBehavior:GetPosition())
+end
+
+function Patroller:UpdatePathPositionBeforeChase()
+    if not self:IsChasing() then
+        self.patrol_path_position_before_chase = self.actor.behaviors.NavigatePathBehavior:GetPosition()
+    end
 end
 
 function Patroller:Remove()

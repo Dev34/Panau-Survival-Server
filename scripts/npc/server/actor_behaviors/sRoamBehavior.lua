@@ -14,6 +14,7 @@ end
 
 function RoamBehavior:PathRequestCallback(data)
     if not data or data.error then
+        -- TODO: if we fail too many times, we should abort to avoid spamming the path server
         self:FindNextPath()
     else
         self.actor_profile_instance.actor:FireBehaviorEvent("PathAcquired", data.path)

@@ -33,7 +33,6 @@ function ChasePlayerBehavior:StartChasing(args)
 end
 
 function ChasePlayerBehavior:StopChasing()
-    Chat:Print("Stopped Chasing", Color.Red)
     self.target = nil
     self.chasing = false
     if self.los_interval then
